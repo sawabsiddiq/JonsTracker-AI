@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Central Glowing Synapse Core representing AI logic -->
+    <!-- Vertical Diamond / Star element (primary pink aura) -->
+    <path
+        android:fillColor="#D946EF"
+        android:pathData="M54,24 L63,45 L84,54 L63,63 L54,84 L45,63 L24,54 L45,45 Z" />
+        
+    <!-- Nested Cyber Cyan Inner Core Star -->
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M54,34 L59,49 L74,54 L59,59 L54,74 L49,59 L34,54 L49,49 Z" />
+
+    <!-- Center core nucleus (White light focus) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,46 L56,52 L62,54 L56,56 L54,62 L52,56 L46,54 L52,52 Z" />
+
+    <!-- Neural synaptic satellite nodes -->
+    <path
+        android:fillColor="#8B5CF6"
+        android:pathData="M54,16 A2,2 0,1,1 54,20 A2,2 0,1,1 54,16 Z" />
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M84,46 A2,2 0,1,1 84,50 A2,2 0,1,1 84,46 Z" />
+    <path
+        android:fillColor="#8B5CF6"
+        android:pathData="M54,76 A2,2 0,1,1 54,80 A2,2 0,1,1 54,76 Z" />
+    <path
+        android:fillColor="#D946EF"
+        android:pathData="M24,46 A2,2 0,1,1 24,50 A2,2 0,1,1 24,46 Z" />
+</vector>
