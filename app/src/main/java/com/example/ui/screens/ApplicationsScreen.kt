@@ -64,24 +64,47 @@ fun ApplicationsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modi
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Tracked Applications", fontWeight = FontWeight.Bold) },
+                title = { 
+                    Column {
+                        Text(
+                            text = "OFFLINE DATABASE",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.5.sp),
+                            color = SleekPrimary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Applications Files",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black, fontSize = 20.sp),
+                            color = SleekSecondary
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground
+                    containerColor = Color.Transparent,
+                    titleContentColor = SleekSecondary
                 )
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary,
+            // Floating pill action button matching refined direction
+            ExtendedFloatingActionButton(
+                onClick = { 
+                    haptic?.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    showAddDialog = true 
+                },
+                containerColor = SleekPrimary,
                 contentColor = Color.White,
-                shape = CircleShape,
-                modifier = Modifier.testTag("add_application_fab")
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .padding(bottom = 78.dp, end = 4.dp) // shift upwards to clear floating bar beautifully
+                    .testTag("add_application_fab")
             ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Application")
+                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Active Node", modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Log Entry", fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         },
+        containerColor = MaterialTheme.colorScheme.background,
         modifier = modifier.fillMaxSize()
     ) { paddingValues ->
         Column(
@@ -90,16 +113,16 @@ fun ApplicationsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modi
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Search Input
+            // Refined Claude search box
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search company, role, or location...") },
-                leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = "Search") },
+                placeholder = { Text("Search company nodes, roles, or geo-locations...") },
+                leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = "Search", tint = SleekPrimary) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(imageVector = Icons.Default.Close, contentDescription = "Clear")
+                            Icon(imageVector = Icons.Default.Clear, contentDescription = "Clear", tint = SleekSubtext)
                         }
                     }
                 },
@@ -107,47 +130,58 @@ fun ApplicationsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modi
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 6.dp)
                     .testTag("job_search_input"),
-                shape = RoundedCornerShape(24.dp),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                    disabledContainerColor = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(18.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = SleekPrimary,
+                    unfocusedBorderColor = SleekBorder,
+                    focusedContainerColor = SleekSurface,
+                    unfocusedContainerColor = SleekSurface
                 )
             )
 
             // Filtering Row 1: Priority
             Text(
-                text = "Priority Level",
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                text = "FILTER PROTOCOL: PRIORITY",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.4.sp, fontSize = 9.sp),
+                color = SleekSubtext,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 4.dp)
             )
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
             ) {
                 items(priorities) { priority ->
                     val isActive = selectedPriority == priority
-                    FilterChip(
-                        selected = isActive,
-                        onClick = { selectedPriority = priority },
-                        label = { Text(priority) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(16.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = if (isActive) SleekPrimary.copy(alpha = 0.12f) else Color.Transparent,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .border(
+                                1.dp,
+                                if (isActive) SleekPrimary else SleekBorder,
+                                RoundedCornerShape(12.dp)
+                            )
+                            .clickable { selectedPriority = priority }
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = priority,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (isActive) SleekPrimary else SleekSecondary
+                        )
+                    }
                 }
             }
 
             // Filtering Row 2: Status
             Text(
-                text = "Pipeline Status",
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                text = "FILTER PROTOCOL: MILESTONE STATUS",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.4.sp, fontSize = 9.sp),
+                color = SleekSubtext,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 4.dp)
             )
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 20.dp),
@@ -156,21 +190,31 @@ fun ApplicationsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modi
             ) {
                 items(statuses) { status ->
                     val isActive = selectedStatus == status
-                    FilterChip(
-                        selected = isActive,
-                        onClick = { selectedStatus = status },
-                        label = { Text(status) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.secondary,
-                            selectedLabelColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.testTag("applications_filter_${status.lowercase().replace(" ", "_")}")
-                    )
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = if (isActive) SleekPrimary.copy(alpha = 0.12f) else Color.Transparent,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .border(
+                                1.dp,
+                                if (isActive) SleekPrimary else SleekBorder,
+                                RoundedCornerShape(12.dp)
+                            )
+                            .clickable { selectedStatus = status }
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                            .testTag("applications_filter_${status.lowercase().replace(" ", "_")}")
+                    ) {
+                        Text(
+                            text = status,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (isActive) SleekPrimary else SleekSecondary
+                        )
+                    }
                 }
             }
 
-            // Application Count header
+            // Results summary header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -178,13 +222,13 @@ fun ApplicationsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modi
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "${filteredApps.size} entries matches your filter",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    text = "DISCOVERED RECORDS (${filteredApps.size})",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.4.sp, fontSize = 8.sp),
+                    color = SleekSubtext
                 )
             }
 
-            // Results List
+            // Results List using newly imported OpportunityCard
             if (filteredApps.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -192,25 +236,21 @@ fun ApplicationsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modi
                         .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "Empty filter results",
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                            modifier = Modifier.size(56.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "No applications found.",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                        )
-                    }
+                    EmptyStatePanel(
+                        title = "No database matches",
+                        subtitle = "Adjust your filtering protocols or query keywords to discover logged records.",
+                        buttonText = "Clear Queries",
+                        onButtonClick = {
+                            searchQuery = ""
+                            selectedPriority = "All"
+                            selectedStatus = "All"
+                        }
+                    )
                 }
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
@@ -221,12 +261,15 @@ fun ApplicationsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modi
                             onClick = { viewModel.navigateTo(Screen.Detail(app.id)) }
                         )
                     }
-                    item { Spacer(modifier = Modifier.height(72.dp)) }
+                    item { 
+                        // bottom spacer padding to guarantee scrolled items are not blocked by the bottom pill navbar
+                        Spacer(modifier = Modifier.height(115.dp)) 
+                    }
                 }
             }
         }
 
-        // Add application overlay
+        // Add application overlay using newly imported dialog from SharedUiComponents.kt
         if (showAddDialog) {
             AddApplicationDialog(
                 onDismiss = { showAddDialog = false },
@@ -245,145 +288,6 @@ fun ApplicationsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modi
                     showAddDialog = false
                 }
             )
-        }
-    }
-}
-
-@Composable
-fun OpportunityCard(app: JobApplication, onClick: () -> Unit) {
-    val haptic = LocalHapticFeedback.current
-    val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-    val dateString = formatter.format(Date(app.appliedDate))
-
-    val priorityColor = getPriorityColor(app.priority)
-    val statusColor = getStatusColor(app.currentStatus)
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                haptic?.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                onClick()
-            }
-            .neonGlow(priorityColor.copy(alpha = 0.08f), 1.dp, 20.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = app.companyName,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onBackground,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = app.jobTitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .background(priorityColor.copy(alpha = 0.12f), CircleShape)
-                        .border(1.dp, priorityColor.copy(alpha = 0.3f), CircleShape)
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = app.priority,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = priorityColor
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (app.location.isNotEmpty()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = "Location",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = app.location,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                            )
-                        }
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = "Date Added",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = dateString,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .background(statusColor.copy(alpha = 0.12f), CircleShape)
-                        .border(1.dp, statusColor.copy(alpha = 0.3f), CircleShape)
-                        .padding(horizontal = 10.dp, vertical = 3.dp)
-                ) {
-                    Text(
-                        text = app.currentStatus,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = statusColor
-                    )
-                }
-            }
-
-            if (app.nextAction.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Divider(color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f))
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = "Execution item",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Next: ${app.nextAction}",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
         }
     }
 }

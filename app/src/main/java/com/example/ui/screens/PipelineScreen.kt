@@ -7,21 +7,19 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -32,9 +30,6 @@ import com.example.data.local.JobApplication
 import com.example.ui.JobTrackerViewModel
 import com.example.ui.Screen
 import com.example.ui.theme.*
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,16 +37,16 @@ fun PipelineScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
     val haptic = LocalHapticFeedback.current
     val applications by viewModel.allApplications.collectAsState()
 
-    // Structured roadmap stops on the Career Journey
+    // Subway journey definitions
     val journeyStations = listOf(
-        JourneyStationInfo("Saved", "Discovery Stop", "Applications bookmarked for potential research.", Icons.Default.Star, Color(0xFF94A3B8)),
-        JourneyStationInfo("Applied", "Landing confirmation", "Official submissions sent with documents.", Icons.Default.Send, Color(0xFF3B82F6)),
-        JourneyStationInfo("Recruiter replied", "Active Dialog", "Contacts established with talent teams.", Icons.Default.Email, Color(0xFF6366F1)),
-        JourneyStationInfo("Assessment", "Evaluation challenge", "Take-home code tests or technical worksheets.", Icons.Default.Lock, Color(0xFFEC4899)),
-        JourneyStationInfo("Interview", "Prep Panels", "Live face-to-face sessions or phone screenings.", Icons.Default.Notifications, Color(0xFFF59E0B)),
-        JourneyStationInfo("Offer", "Victory Station", "Congratulations! Employment contract offers.", Icons.Default.Favorite, Color(0xFF10B981)),
-        JourneyStationInfo("Rejected", "Pivot node", "Process closed. Archive for pivot learning.", Icons.Default.Close, Color(0xFFEF4444)),
-        JourneyStationInfo("Ghosted", "Dormant node", "No active communications over a prolonged cycle.", Icons.Default.Warning, Color(0xFF78716C))
+        JourneyStationInfo("Saved", "Discovery Stop", "Bookmarked roles being analyzed.", Icons.Default.Star, StatusSaved),
+        JourneyStationInfo("Applied", "Landing node", "Official documents successfully submitted.", Icons.Default.Send, StatusApplied),
+        JourneyStationInfo("Recruiter replied", "Dialogue Hub", "Engaging with development and hiring teams.", Icons.Default.Email, StatusReplied),
+        JourneyStationInfo("Assessment", "Evaluation coordinate", "Take-home code challanges and take-home evaluations.", Icons.Default.Lock, StatusAssessment),
+        JourneyStationInfo("Interview", "Prep Panels", "Face-to-face active technical screens.", Icons.Default.Face, StatusInterview),
+        JourneyStationInfo("Offer", "Victory Outpost", "Congratulations! Active contractual offers.", Icons.Default.Favorite, StatusOffer),
+        JourneyStationInfo("Rejected", "Pivot Node", "Archived coordinates used to pivot criteria.", Icons.Default.Close, StatusRejected),
+        JourneyStationInfo("Ghosted", "Dormant Track", "Await reactivation checkpoints on silent threads.", Icons.Default.Warning, StatusGhosted)
     )
 
     var expandedStation by remember { mutableStateOf<String?>("Interview") }
@@ -59,13 +54,28 @@ fun PipelineScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("App Career Journey Trail", fontWeight = FontWeight.Bold) },
+                title = { 
+                    Column {
+                        Text(
+                            text = "VISUAL ROADMAP MAP",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.5.sp),
+                            color = SleekPrimary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Career Subway Trail",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black, fontSize = 20.sp),
+                            color = SleekSecondary
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground
+                    containerColor = Color.Transparent,
+                    titleContentColor = SleekSecondary
                 )
             )
         },
+        containerColor = MaterialTheme.colorScheme.background,
         modifier = modifier.fillMaxSize()
     ) { paddingValues ->
         Column(
@@ -74,67 +84,108 @@ fun PipelineScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Header instructions
+            // Subway Instructions header
             Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)) {
                 Text(
-                    text = "ROADMAP PIPELINE STATION VIA FLUID NODES",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                    text = "ACTIVE TRANSIT SYSTEM",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, fontSize = 9.sp, letterSpacing = 0.4.sp),
+                    color = SleekSubtext
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Each job application represents an active traveler. Tap a station to view lists, log events, or guide them forward down the pipeline path.",
+                    text = "Observe active opportunity travelers trailing down distinct milestone coordinates. Expand any coordinates to coordinate transfer details.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                    color = SleekSubtext
                 )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Main vertical layout of Journey Stations
+            // Scrollable route with drawing behind vertical trace line to establish connected subway track visual
             LazyColumn(
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
+                    .drawBehind {
+                        // Drawing the clean vertical subway track background trace line
+                        // The relative node coordinate is offset at horizontal start paddings (approx 18.dp offset)
+                        val lineX = 18.dp.toPx()
+                        drawLine(
+                            color = SleekBorder,
+                            start = Offset(lineX, 0f),
+                            end = Offset(lineX, size.height),
+                            strokeWidth = 3.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    }
             ) {
                 items(journeyStations) { station ->
                     val isExpanded = expandedStation == station.stage
                     val stationApps = applications.filter { it.currentStatus.equals(station.stage, ignoreCase = true) }
 
-                    JourneyStationNode(
-                        info = station,
-                        apps = stationApps,
+                    JourneyStationCard(
+                        stationName = station.stage,
+                        description = station.textLabel + ": " + station.description,
+                        icon = station.icon,
+                        appsCount = stationApps.size,
                         isExpanded = isExpanded,
-                        onToggle = {
+                        onToggleExpand = {
+                            haptic?.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                             expandedStation = if (isExpanded) null else station.stage
                         },
-                        onNavigateToApp = { appId ->
-                            viewModel.navigateTo(Screen.Detail(appId))
-                        },
-                        onStatusChange = { app, newStatus ->
-                            viewModel.updateApplicationDetails(app.copy(currentStatus = newStatus, updatedAt = System.currentTimeMillis()))
-                            viewModel.addTimelineEvent(
-                                appId = app.id,
-                                type = when (newStatus) {
-                                    "Saved" -> "unknown"
-                                    "Applied" -> "application_confirmation"
-                                    "Recruiter replied" -> "recruiter_reply"
-                                    "Assessment" -> "assessment_invitation"
-                                    "Interview" -> "interview_invitation"
-                                    "Offer" -> "offer"
-                                    "Rejected" -> "rejection"
-                                    "Ghosted" -> "ghosted"
-                                    else -> "unknown"
-                                },
-                                summary = "Status updated to '$newStatus' via Station Journey Control.",
-                                timestamp = System.currentTimeMillis()
-                            )
+                        stationColor = station.baseColor
+                    ) {
+                        if (stationApps.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No active opportunity travelers here.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = SleekSubtext
+                                )
+                            }
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                stationApps.forEach { app ->
+                                    SubwayTravelerRow(
+                                        app = app,
+                                        stationColor = station.baseColor,
+                                        onNavigate = { viewModel.navigateTo(Screen.Detail(app.id)) },
+                                        onShiftStatus = { newStatus ->
+                                            viewModel.updateApplicationDetails(app.copy(currentStatus = newStatus, updatedAt = System.currentTimeMillis()))
+                                            viewModel.addTimelineEvent(
+                                                appId = app.id,
+                                                type = when (newStatus) {
+                                                    "Saved" -> "unknown"
+                                                    "Applied" -> "application_confirmation"
+                                                    "Recruiter replied" -> "recruiter_reply"
+                                                    "Assessment" -> "assessment_invitation"
+                                                    "Interview" -> "interview_invitation"
+                                                    "Offer" -> "offer"
+                                                    "Rejected" -> "rejection"
+                                                    "Ghosted" -> "ghosted"
+                                                    else -> "unknown"
+                                                },
+                                                summary = "Status updated to '$newStatus' via subway station control.",
+                                                timestamp = System.currentTimeMillis()
+                                            )
+                                        }
+                                    )
+                                }
+                            }
                         }
-                    )
+                    }
                 }
-                item { Spacer(modifier = Modifier.height(72.dp)) }
+                item { 
+                    // bottom padding spacer to clear the navigation bar
+                    Spacer(modifier = Modifier.height(115.dp)) 
+                }
             }
         }
     }
@@ -148,148 +199,8 @@ data class JourneyStationInfo(
     val baseColor: Color
 )
 
-@OptIn(ExperimentalAnimationApi::class)
 @Composable
-fun JourneyStationNode(
-    info: JourneyStationInfo,
-    apps: List<JobApplication>,
-    isExpanded: Boolean,
-    onToggle: () -> Unit,
-    onNavigateToApp: (Int) -> Unit,
-    onStatusChange: (JobApplication, String) -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (isExpanded) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
-        ),
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(
-            1.2.dp,
-            if (isExpanded) info.baseColor.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f)
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("journey_node_${info.stage.lowercase().replace(" ", "_")}")
-    ) {
-        Column {
-            // Station Header Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        haptic?.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                        onToggle()
-                    }
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(info.baseColor.copy(alpha = 0.12f), CircleShape)
-                            .border(1.dp, info.baseColor.copy(alpha = 0.3f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(imageVector = info.icon, contentDescription = null, tint = info.baseColor, modifier = Modifier.size(20.dp))
-                    }
-
-                    Column {
-                        Text(
-                            text = info.stage,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = info.textLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = info.baseColor,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .background(info.baseColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "${apps.size} traveler" + if (apps.size == 1) "" else "s",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = info.baseColor
-                        )
-                    }
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Expand Stop Details",
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = isExpanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = info.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 12.dp)
-                    )
-
-                    if (apps.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(80.dp)
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "No active nodes at this journey coordinate.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            )
-                        }
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            apps.forEach { app ->
-                                JourneyTravelerRow(
-                                    app = app,
-                                    stationColor = info.baseColor,
-                                    onNavigate = { onNavigateToApp(app.id) },
-                                    onShiftStatus = { newStatus -> onStatusChange(app, newStatus) }
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun JourneyTravelerRow(
+fun SubwayTravelerRow(
     app: JobApplication,
     stationColor: Color,
     onNavigate: () -> Unit,
@@ -301,8 +212,8 @@ fun JourneyTravelerRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+            .background(SleekNavBarBg, RoundedCornerShape(12.dp))
+            .border(1.dp, SleekBorder, RoundedCornerShape(12.dp))
             .clickable { onNavigate() }
             .padding(12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -311,15 +222,15 @@ fun JourneyTravelerRow(
         Column(modifier = Modifier.weight(1f).padding(end = 6.dp)) {
             Text(
                 text = app.companyName,
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                color = SleekSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = app.jobTitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                color = SleekSubtext,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -328,14 +239,14 @@ fun JourneyTravelerRow(
         Box {
             OutlinedButton(
                 onClick = { isShiftExpanded = true },
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(10.dp),
                 border = BorderStroke(1.dp, stationColor.copy(alpha = 0.5f)),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                modifier = Modifier.height(32.dp)
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.height(30.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Transfer Stop", fontSize = 11.sp, color = stationColor, fontWeight = FontWeight.Bold)
-                    Icon(imageVector = Icons.Default.ArrowForward, contentDescription = null, tint = stationColor, modifier = Modifier.size(11.dp))
+                    Text("Transfer", fontSize = 10.sp, color = stationColor, fontWeight = FontWeight.Bold)
+                    Icon(imageVector = Icons.Default.ArrowForward, contentDescription = null, tint = stationColor, modifier = Modifier.size(10.dp))
                 }
             }
 

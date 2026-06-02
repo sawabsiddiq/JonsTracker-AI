@@ -11,6 +11,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
@@ -21,6 +24,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.example.ui.*
@@ -54,66 +58,21 @@ class MainActivity : ComponentActivity() {
                         currentScreen !is Screen.Detail
 
                 Scaffold(
-                    bottomBar = {
-                        if (showBottomBar) {
-                            NavigationBar(
-                                containerColor = MaterialTheme.colorScheme.surface,
-                                modifier = Modifier.testTag("app_bottom_nav_bar")
-                            ) {
-                                NavigationBarItem(
-                                    selected = currentScreen is Screen.Today,
-                                    onClick = { viewModel.navigateTo(Screen.Today) },
-                                    icon = { Icon(imageVector = Icons.Default.Home, contentDescription = "Today") },
-                                    label = { Text("Today") },
-                                    modifier = Modifier.testTag("nav_item_today")
-                                )
-                                NavigationBarItem(
-                                    selected = currentScreen is Screen.Applications,
-                                    onClick = { viewModel.navigateTo(Screen.Applications) },
-                                    icon = { Icon(imageVector = Icons.Default.Search, contentDescription = "Applications") },
-                                    label = { Text("Applications") },
-                                    modifier = Modifier.testTag("nav_item_applications")
-                                )
-                                NavigationBarItem(
-                                    selected = currentScreen is Screen.AiInbox,
-                                    onClick = { viewModel.navigateTo(Screen.AiInbox) },
-                                    icon = { Icon(imageVector = Icons.Default.Email, contentDescription = "AI Inbox") },
-                                    label = { Text("AI Inbox") },
-                                    modifier = Modifier.testTag("nav_item_ai_inbox")
-                                )
-                                NavigationBarItem(
-                                    selected = currentScreen is Screen.Pipeline,
-                                    onClick = { viewModel.navigateTo(Screen.Pipeline) },
-                                    icon = { Icon(imageVector = Icons.Default.Star, contentDescription = "Pipeline") },
-                                    label = { Text("Pipeline") },
-                                    modifier = Modifier.testTag("nav_item_pipeline")
-                                )
-                                NavigationBarItem(
-                                    selected = currentScreen is Screen.Insights,
-                                    onClick = { viewModel.navigateTo(Screen.Insights) },
-                                    icon = { Icon(imageVector = Icons.Default.Build, contentDescription = "Insights") },
-                                    label = { Text("Insights") },
-                                    modifier = Modifier.testTag("nav_item_insights")
-                                )
-                            }
-                        }
-                    },
                     modifier = Modifier.fillMaxSize()
                 ) { innerPadding ->
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.background)
-                            .padding(
-                                bottom = if (showBottomBar) innerPadding.calculateBottomPadding() else 0.dp
-                             )
+                            .padding(top = innerPadding.calculateTopPadding())
                     ) {
                         AnimatedContent(
                             targetState = currentScreen,
                             transitionSpec = {
                                 fadeIn() togetherWith fadeOut()
                             },
-                            label = "ScreenSwitchAnimator"
+                            label = "ScreenSwitchAnimator",
+                            modifier = Modifier.fillMaxSize()
                         ) { screen ->
                             when (screen) {
                                 is Screen.Onboarding -> OnboardingScreen(viewModel = viewModel)
@@ -124,6 +83,17 @@ class MainActivity : ComponentActivity() {
                                 is Screen.Insights -> InsightsScreen(viewModel = viewModel)
                                 is Screen.Detail -> DetailScreen(applicationId = screen.applicationId, viewModel = viewModel)
                             }
+                        }
+
+                        if (showBottomBar) {
+                            FloatingBottomNav(
+                                currentScreen = currentScreen,
+                                onNavigate = { viewModel.navigateTo(it) },
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .windowInsetsPadding(WindowInsets.navigationBars)
+                                    .testTag("app_bottom_nav_bar")
+                            )
                         }
                     }
                 }
