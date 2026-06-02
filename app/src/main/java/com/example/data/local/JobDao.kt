@@ -47,4 +47,23 @@ interface JobDao {
 
     @Query("DELETE FROM processed_emails")
     suspend fun deleteAllProcessedEmails()
+
+    // --- Pending AI Extraction Queries ---
+    @Query("SELECT * FROM pending_ai_extractions")
+    fun getAllPendingExtractionsFlow(): Flow<List<PendingAiExtraction>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPendingExtraction(extraction: PendingAiExtraction): Long
+
+    @Query("DELETE FROM pending_ai_extractions WHERE messageId = :messageId")
+    suspend fun deletePendingExtractionById(messageId: String)
+
+    @Query("DELETE FROM pending_ai_extractions")
+    suspend fun deleteAllPendingExtractions()
+
+    @Query("DELETE FROM job_applications")
+    suspend fun deleteAllApplications()
+
+    @Query("DELETE FROM job_events")
+    suspend fun deleteAllEvents()
 }

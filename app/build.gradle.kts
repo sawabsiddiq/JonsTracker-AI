@@ -11,7 +11,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.example"
+    applicationId = "com.aistudio.jobtracker.prod"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
@@ -43,6 +43,13 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
+    create("staging") {
+      isCrunchPngs = false
+      isMinifyEnabled = false
+      proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+      applicationIdSuffix = ".staging"
+      signingConfig = signingConfigs.getByName("debugConfig")
+    }
     debug {
       signingConfig = signingConfigs.getByName("debugConfig")
     }
@@ -70,6 +77,9 @@ secrets {
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
+  implementation(libs.androidx.work.runtime.ktx)
+  implementation(libs.androidx.security.crypto)
+  implementation(libs.firebase.crashlytics)
   // implementation(libs.accompanist.permissions)
   implementation(libs.androidx.activity.compose)
   // implementation(libs.androidx.camera.camera2)

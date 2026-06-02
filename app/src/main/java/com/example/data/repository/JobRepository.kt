@@ -4,12 +4,14 @@ import com.example.data.local.JobApplication
 import com.example.data.local.JobDao
 import com.example.data.local.JobEvent
 import com.example.data.local.ProcessedEmail
+import com.example.data.local.PendingAiExtraction
 import kotlinx.coroutines.flow.Flow
 
 class JobRepository(private val jobDao: JobDao) {
 
     val allApplications: Flow<List<JobApplication>> = jobDao.getAllApplicationsFlow()
     val allProcessedEmails: Flow<List<ProcessedEmail>> = jobDao.getAllProcessedEmailsFlow()
+    val allPendingExtractions: Flow<List<PendingAiExtraction>> = jobDao.getAllPendingExtractionsFlow()
 
     suspend fun getApplicationById(id: Int): JobApplication? {
         return jobDao.getApplicationById(id)
@@ -50,5 +52,24 @@ class JobRepository(private val jobDao: JobDao) {
 
     suspend fun deleteAllProcessedEmails() {
         jobDao.deleteAllProcessedEmails()
+    }
+
+    suspend fun insertPendingExtraction(extraction: PendingAiExtraction): Long {
+        return jobDao.insertPendingExtraction(extraction)
+    }
+
+    suspend fun deletePendingExtractionById(messageId: String) {
+        jobDao.deletePendingExtractionById(messageId)
+    }
+
+    suspend fun deleteAllPendingExtractions() {
+        jobDao.deleteAllPendingExtractions()
+    }
+
+    suspend fun clearAllData() {
+        jobDao.deleteAllApplications()
+        jobDao.deleteAllEvents()
+        jobDao.deleteAllProcessedEmails()
+        jobDao.deleteAllPendingExtractions()
     }
 }

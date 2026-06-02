@@ -53,8 +53,9 @@ class MainActivity : ComponentActivity() {
                     viewModel.navigateBack()
                 }
 
-                // Decide whether to show bottom navigation (Suppress it on Onboarding, or Detail views)
+                // Decide whether to show bottom navigation (Suppress it on Onboarding, Settings, or Detail views)
                 val showBottomBar = currentScreen !is Screen.Onboarding &&
+                        currentScreen !is Screen.Settings &&
                         currentScreen !is Screen.Detail
 
                 Scaffold(
@@ -81,6 +82,7 @@ class MainActivity : ComponentActivity() {
                                 is Screen.AiInbox -> AiInboxScreen(viewModel = viewModel)
                                 is Screen.Pipeline -> PipelineScreen(viewModel = viewModel)
                                 is Screen.Insights -> InsightsScreen(viewModel = viewModel)
+                                is Screen.Settings -> SettingsScreen(viewModel = viewModel)
                                 is Screen.Detail -> DetailScreen(applicationId = screen.applicationId, viewModel = viewModel)
                             }
                         }

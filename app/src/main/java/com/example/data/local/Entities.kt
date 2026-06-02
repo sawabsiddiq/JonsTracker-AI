@@ -48,3 +48,28 @@ data class ProcessedEmail(
     val confidence: Float,
     val linkedApplicationId: Int? = null
 )
+
+@Entity(tableName = "pending_ai_extractions")
+data class PendingAiExtraction(
+    @PrimaryKey val messageId: String,
+    val threadId: String,
+    val sender: String,
+    val subject: String,
+    val dateString: String,
+    val body: String,
+    val snippet: String,
+    val isJobRelated: Boolean,
+    val confidence: Float,
+    val eventType: String,
+    val companyName: String? = null,
+    val jobTitle: String? = null,
+    val applicationStatus: String? = null,
+    val eventDate: String? = null,
+    val deadline: String? = null,
+    val recruiterName: String? = null,
+    val recruiterEmail: String? = null,
+    val source: String = "Gmail",
+    val summary: String? = null,
+    val nextAction: String? = null,
+    val followUpDate: String? = null
+)

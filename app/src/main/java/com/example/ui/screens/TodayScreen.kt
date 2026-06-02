@@ -115,6 +115,18 @@ fun TodayScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier) {
                         Spacer(modifier = Modifier.width(5.dp))
                         Text("Simulate Email", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
+                    IconButton(
+                        onClick = {
+                            viewModel.navigateTo(Screen.Settings)
+                        },
+                        modifier = Modifier.testTag("app_settings_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = SleekPrimary
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,

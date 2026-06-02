@@ -10,6 +10,9 @@ import com.example.data.local.AppDatabase
 import com.example.data.local.JobApplication
 import com.example.data.local.JobEvent
 import com.example.data.local.ProcessedEmail
+import com.example.data.local.PendingAiExtraction
+import com.example.data.local.SecurePrefsManager
+import com.example.data.analytics.CrashlyticsHelper
 import com.example.data.repository.JobRepository
 import com.example.data.remote.DemoEmail
 import com.example.data.remote.GeminiClient
@@ -31,7 +34,18 @@ sealed class Screen {
     object AiInbox : Screen()
     object Pipeline : Screen()
     object Insights : Screen()
+    object Settings : Screen()
     data class Detail(val applicationId: Int) : Screen()
+}
+
+sealed class SyncErrorType {
+    object None : SyncErrorType()
+    object NoInternet : SyncErrorType()
+    object AuthFailure : SyncErrorType()
+    object TokenExpired : SyncErrorType()
+    object GeminiFailure : SyncErrorType()
+    object EmptyInbox : SyncErrorType()
+    object DuplicateJobUpdate : SyncErrorType()
 }
 
 class JobTrackerViewModel(application: Application) : AndroidViewModel(application) {
@@ -56,7 +70,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
             initialValue = emptyList()
         )
 
-    private val prefs = application.getSharedPreferences("job_tracker_prefs", android.content.Context.MODE_PRIVATE)
+    private val prefs = SecurePrefsManager.getSecurePrefs(application)
 
     private val _gmailAccessToken = MutableStateFlow(prefs.getString("gmail_token", null))
     val gmailAccessToken: StateFlow<String?> = _gmailAccessToken.asStateFlow()
@@ -80,6 +94,9 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
     private val _syncError = MutableStateFlow<String?>(null)
     val syncError: StateFlow<String?> = _syncError.asStateFlow()
 
+    private val _syncErrorType = MutableStateFlow<SyncErrorType>(SyncErrorType.None)
+    val syncErrorType: StateFlow<SyncErrorType> = _syncErrorType.asStateFlow()
+
     // --- Navigation backstack ---
     private val screenStack = mutableListOf<Screen>()
 
@@ -93,17 +110,44 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
 
-        // Run continuous background / automation scanner loop
+        // Collect SQLite-persisted pending extractions into _gmailSyncResults
         viewModelScope.launch {
-            while (true) {
-                kotlinx.coroutines.delay(60000) // check for new email updates / simulation triggers every 60 seconds
-                if (_autoSyncEnabled.value) {
-                    val token = _gmailAccessToken.value
-                    if (!token.isNullOrEmpty()) {
-                        autoScanAndInjectLiveGmail(token)
-                    }
+            repository.allPendingExtractions.collect { list ->
+                val pairs = list.map { pending ->
+                    val email = DemoEmail(
+                        messageId = pending.messageId,
+                        threadId = pending.threadId,
+                        sender = pending.sender,
+                        subject = pending.subject,
+                        dateString = pending.dateString,
+                        body = pending.body,
+                        snippet = pending.snippet
+                    )
+                    val result = JobExtractionResult(
+                        isJobRelated = pending.isJobRelated,
+                        confidence = pending.confidence,
+                        eventType = pending.eventType,
+                        companyName = pending.companyName,
+                        jobTitle = pending.jobTitle,
+                        applicationStatus = pending.applicationStatus,
+                        eventDate = pending.eventDate,
+                        deadline = pending.deadline,
+                        recruiterName = pending.recruiterName,
+                        recruiterEmail = pending.recruiterEmail,
+                        source = pending.source ?: "Gmail",
+                        summary = pending.summary,
+                        nextAction = pending.nextAction,
+                        followUpDate = pending.followUpDate
+                    )
+                    email to result
                 }
+                _gmailSyncResults.value = pairs
             }
+        }
+
+        // Initialize WorkManager Periodic sync if autoSync is active and credentials exist
+        if (_autoSyncEnabled.value && !_gmailAccessToken.value.isNullOrEmpty()) {
+            scheduleBackgroundSync()
         }
     }
 
@@ -111,22 +155,63 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
         prefs.edit().putString("gmail_token", token).apply()
         _gmailAccessToken.value = token
         if (!token.isNullOrEmpty()) {
+            scheduleBackgroundSync()
             scanGmail(demoMode = false)
+        } else {
+            cancelBackgroundSync()
         }
     }
 
     fun clearGmailToken() {
         prefs.edit().remove("gmail_token").apply()
         _gmailAccessToken.value = null
+        cancelBackgroundSync()
     }
 
-    fun resetSyncLogs() {
+    fun deleteGmailSyncHistory() {
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteAllProcessedEmails()
+            repository.deleteAllPendingExtractions()
             _lastGmailScan.value = 0L
             prefs.edit().putLong("last_gmail_scan", 0L).apply()
             withContext(Dispatchers.Main) {
-                _syncError.value = "Demo scan logs reset! You can now launch a fresh Gmail AI scan simulation."
+                _syncError.value = "Your Google Mail scraping logs and hashes have been entirely cleared."
+                _syncErrorType.value = SyncErrorType.None
+            }
+        }
+    }
+
+    fun deleteAllApplicationData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.clearAllData()
+            withContext(Dispatchers.Main) {
+                _gmailSyncResults.value = emptyList()
+                _currentScreen.value = Screen.Onboarding
+                screenStack.clear()
+            }
+        }
+    }
+
+    fun exportData(onExportReady: (String) -> Unit) {
+        viewModelScope.launch(Dispatchers.Default) {
+            val apps = allApplications.value
+            val sb = java.lang.StringBuilder()
+            sb.append("[\n")
+            apps.forEachIndexed { index, app ->
+                sb.append("  {\n")
+                sb.append("    \"company\": \"${app.companyName.replace("\"", "\\\"")}\",\n")
+                sb.append("    \"role\": \"${app.jobTitle.replace("\"", "\\\"")}\",\n")
+                sb.append("    \"status\": \"${app.currentStatus}\",\n")
+                sb.append("    \"applied_date\": ${app.appliedDate},\n")
+                sb.append("    \"source\": \"${app.source}\",\n")
+                sb.append("    \"priority\": \"${app.priority}\"\n")
+                sb.append("  }")
+                if (index < apps.size - 1) sb.append(",")
+                sb.append("\n")
+            }
+            sb.append("]")
+            withContext(Dispatchers.Main) {
+                onExportReady(sb.toString())
             }
         }
     }
@@ -134,6 +219,42 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
     fun setAutoSync(enabled: Boolean) {
         prefs.edit().putBoolean("auto_sync", enabled).apply()
         _autoSyncEnabled.value = enabled
+        if (enabled) {
+            scheduleBackgroundSync()
+        } else {
+            cancelBackgroundSync()
+        }
+    }
+
+    private fun scheduleBackgroundSync() {
+        try {
+            val constraints = androidx.work.Constraints.Builder()
+                .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                .build()
+            val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.example.data.sync.GmailSyncWorker>(
+                15, java.util.concurrent.TimeUnit.MINUTES
+            )
+            .setConstraints(constraints)
+            .build()
+
+            androidx.work.WorkManager.getInstance(getApplication())
+                .enqueueUniquePeriodicWork(
+                    "GmailSyncWorker",
+                    androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                    workRequest
+                )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to schedule periodic WorkManager task", e)
+        }
+    }
+
+    private fun cancelBackgroundSync() {
+        try {
+            androidx.work.WorkManager.getInstance(getApplication())
+                .cancelUniqueWork("GmailSyncWorker")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to cancel periodic WorkManager task", e)
+        }
     }
 
     fun navigateTo(screen: Screen) {
@@ -254,6 +375,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             _syncingState.value = true
             _syncError.value = null
+            _syncErrorType.value = SyncErrorType.None
             _gmailSyncResults.value = emptyList()
 
             var success = true
@@ -266,15 +388,32 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                     val bearer = "Bearer $token"
                     val query = "newer_than:15d"
 
-                    val listResponse = withContext(Dispatchers.IO) {
-                        GmailClient.service.listMessages(bearerToken = bearer, query = query, maxResults = 25)
+                    val listResponse = try {
+                        withContext(Dispatchers.IO) {
+                            GmailClient.service.listMessages(bearerToken = bearer, query = query, maxResults = 25)
+                        }
+                    } catch (e: java.io.IOException) {
+                        _syncErrorType.value = SyncErrorType.NoInternet
+                        _syncError.value = "No internet connection detected. Please verify your internet link and try again."
+                        CrashlyticsHelper.recordException(e)
+                        return@launch
+                    } catch (e: retrofit2.HttpException) {
+                        if (e.code() == 401 || e.code() == 403) {
+                            _syncErrorType.value = SyncErrorType.TokenExpired
+                            _syncError.value = "Your authorized Gmail session has expired. Please disconnected and reconnect."
+                        } else {
+                            _syncErrorType.value = SyncErrorType.AuthFailure
+                            _syncError.value = "Google Auth Connection error (${e.code()}): ${e.message()}"
+                        }
+                        CrashlyticsHelper.recordException(e)
+                        return@launch
                     }
 
                     val messages = listResponse.messages ?: emptyList()
                     if (messages.isEmpty()) {
                         withContext(Dispatchers.Main) {
+                            _syncErrorType.value = SyncErrorType.EmptyInbox
                             _syncError.value = "Your inbox is clean and fully synced. No emails found matching 'newer_than:15d'!"
-                            _syncingState.value = false
                         }
                         return@launch
                     }
@@ -282,8 +421,8 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                     val unprocessed = messages.filter { !repository.isEmailProcessed(it.id) }
                     if (unprocessed.isEmpty()) {
                         withContext(Dispatchers.Main) {
-                            _syncError.value = "All emails in the last 15 days are already analyzed and active in your pipeline."
-                            _syncingState.value = false
+                            _syncErrorType.value = SyncErrorType.DuplicateJobUpdate
+                            _syncError.value = "Duplicate update: All emails in the last 15 days are already analyzed and active in your pipeline."
                         }
                         return@launch
                     }
@@ -317,6 +456,8 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                                     }
                                 } else {
                                     // Fallback prediction if off-line / key missing
+                                    _syncErrorType.value = SyncErrorType.GeminiFailure
+                                    CrashlyticsHelper.log("Gemini parsed null result. Directing to heuristic backup.")
                                     val fallbackResult = generateLocalExtractionFallback(email)
                                     if (fallbackResult.isJobRelated) {
                                         pendingResults.add(email to fallbackResult)
@@ -337,6 +478,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                                 }
                             } catch (e: Exception) {
                                 Log.e(TAG, "Failed to parse individual live email ${ref.id}", e)
+                                CrashlyticsHelper.recordException(e)
                             }
                         }
                     }
@@ -344,7 +486,35 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                     if (pendingResults.isEmpty()) {
                         _syncError.value = "No job-related updates detected in the latest unparsed emails."
                     } else {
-                        _gmailSyncResults.value = pendingResults
+                        // Persist these to SQLite so that AI Inbox reviews are non-volatile
+                        withContext(Dispatchers.IO) {
+                            pendingResults.forEach { (email, result) ->
+                                val pendingEntity = PendingAiExtraction(
+                                    messageId = email.messageId,
+                                    threadId = email.threadId,
+                                    sender = email.sender,
+                                    subject = email.subject,
+                                    dateString = email.dateString,
+                                    body = email.body,
+                                    snippet = email.snippet,
+                                    isJobRelated = result.isJobRelated,
+                                    confidence = result.confidence,
+                                    eventType = result.eventType,
+                                    companyName = result.companyName,
+                                    jobTitle = result.jobTitle,
+                                    applicationStatus = result.applicationStatus,
+                                    eventDate = result.eventDate,
+                                    deadline = result.deadline,
+                                    recruiterName = result.recruiterName,
+                                    recruiterEmail = result.recruiterEmail,
+                                    source = result.source ?: "Gmail",
+                                    summary = result.summary,
+                                    nextAction = result.nextAction,
+                                    followUpDate = result.followUpDate
+                                )
+                                repository.insertPendingExtraction(pendingEntity)
+                            }
+                        }
                         navigateTo(Screen.AiInbox)
                     }
 
@@ -355,8 +525,8 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
 
                     if (unprocessed.isEmpty()) {
                         withContext(Dispatchers.Main) {
-                            _syncError.value = "Your inbox is secure and fully synced. No new un-processed job related emails found!"
-                            _syncingState.value = false
+                            _syncErrorType.value = SyncErrorType.DuplicateJobUpdate
+                            _syncError.value = "Duplicate update: Your inbox is secure and fully synced. No new un-processed job related emails found!"
                         }
                         return@launch
                     }
@@ -411,13 +581,42 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                     if (pendingResults.isEmpty()) {
                         _syncError.value = "No job-related updates detected in the latest unparsed emails."
                     } else {
-                        _gmailSyncResults.value = pendingResults
+                        // Persist these to SQLite so that AI Inbox reviews are non-volatile
+                        withContext(Dispatchers.IO) {
+                            pendingResults.forEach { (email, result) ->
+                                val pendingEntity = PendingAiExtraction(
+                                    messageId = email.messageId,
+                                    threadId = email.threadId,
+                                    sender = email.sender,
+                                    subject = email.subject,
+                                    dateString = email.dateString,
+                                    body = email.body,
+                                    snippet = email.snippet,
+                                    isJobRelated = result.isJobRelated,
+                                    confidence = result.confidence,
+                                    eventType = result.eventType,
+                                    companyName = result.companyName,
+                                    jobTitle = result.jobTitle,
+                                    applicationStatus = result.applicationStatus,
+                                    eventDate = result.eventDate,
+                                    deadline = result.deadline,
+                                    recruiterName = result.recruiterName,
+                                    recruiterEmail = result.recruiterEmail,
+                                    source = result.source ?: "Gmail",
+                                    summary = result.summary,
+                                    nextAction = result.nextAction,
+                                    followUpDate = result.followUpDate
+                                )
+                                repository.insertPendingExtraction(pendingEntity)
+                            }
+                        }
                         navigateTo(Screen.AiInbox)
                     }
                 }
             } catch (e: Exception) {
                 success = false
                 Log.e(TAG, "Sync process failed", e)
+                CrashlyticsHelper.recordException(e)
                 _syncError.value = "Scraper error: ${e.message}"
             } finally {
                 if (success) {
@@ -671,6 +870,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                 linkedApplicationId = targetAppId
             )
             repository.insertProcessedEmail(proceEmail)
+            repository.deletePendingExtractionById(email.messageId)
 
             // Remove from local review state block
             withContext(Dispatchers.Main) {
@@ -696,6 +896,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                 linkedApplicationId = null
             )
             repository.insertProcessedEmail(proceEmail)
+            repository.deletePendingExtractionById(email.messageId)
 
             withContext(Dispatchers.Main) {
                 _gmailSyncResults.value = _gmailSyncResults.value.filter { it.first.messageId != email.messageId }
