@@ -16,6 +16,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -42,13 +45,12 @@ class MainActivity : ComponentActivity() {
                 val currentScreen by viewModel.currentScreen.collectAsState()
 
                 // Intercept back gestures globally to avoid exiting the app unexpectedly
-                BackHandler(enabled = currentScreen !is Screen.Dashboard && currentScreen !is Screen.Onboarding) {
+                BackHandler(enabled = currentScreen !is Screen.Today && currentScreen !is Screen.Onboarding) {
                     viewModel.navigateBack()
                 }
 
-                // Decide whether to show bottom navigation (Suppress it on Onboarding, Sync Review, or Detail views)
+                // Decide whether to show bottom navigation (Suppress it on Onboarding, or Detail views)
                 val showBottomBar = currentScreen !is Screen.Onboarding &&
-                        currentScreen !is Screen.GmailSyncReview &&
                         currentScreen !is Screen.Detail
 
                 Scaffold(
@@ -59,25 +61,39 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.testTag("app_bottom_nav_bar")
                             ) {
                                 NavigationBarItem(
-                                    selected = currentScreen is Screen.Dashboard,
-                                    onClick = { viewModel.navigateTo(Screen.Dashboard) },
-                                    icon = { Icon(imageVector = Icons.Default.Home, contentDescription = "Dashboard") },
-                                    label = { Text("Dashboard") },
-                                    modifier = Modifier.testTag("nav_item_dashboard")
+                                    selected = currentScreen is Screen.Today,
+                                    onClick = { viewModel.navigateTo(Screen.Today) },
+                                    icon = { Icon(imageVector = Icons.Default.Home, contentDescription = "Today") },
+                                    label = { Text("Today") },
+                                    modifier = Modifier.testTag("nav_item_today")
+                                )
+                                NavigationBarItem(
+                                    selected = currentScreen is Screen.Applications,
+                                    onClick = { viewModel.navigateTo(Screen.Applications) },
+                                    icon = { Icon(imageVector = Icons.Default.Search, contentDescription = "Applications") },
+                                    label = { Text("Applications") },
+                                    modifier = Modifier.testTag("nav_item_applications")
+                                )
+                                NavigationBarItem(
+                                    selected = currentScreen is Screen.AiInbox,
+                                    onClick = { viewModel.navigateTo(Screen.AiInbox) },
+                                    icon = { Icon(imageVector = Icons.Default.Email, contentDescription = "AI Inbox") },
+                                    label = { Text("AI Inbox") },
+                                    modifier = Modifier.testTag("nav_item_ai_inbox")
                                 )
                                 NavigationBarItem(
                                     selected = currentScreen is Screen.Pipeline,
                                     onClick = { viewModel.navigateTo(Screen.Pipeline) },
-                                    icon = { Icon(imageVector = Icons.Default.List, contentDescription = "Board info") },
-                                    label = { Text("Board") },
+                                    icon = { Icon(imageVector = Icons.Default.Star, contentDescription = "Pipeline") },
+                                    label = { Text("Pipeline") },
                                     modifier = Modifier.testTag("nav_item_pipeline")
                                 )
                                 NavigationBarItem(
-                                    selected = currentScreen is Screen.Analytics,
-                                    onClick = { viewModel.navigateTo(Screen.Analytics) },
-                                    icon = { Icon(imageVector = Icons.Default.Build, contentDescription = "Metrics") },
-                                    label = { Text("Metrics") },
-                                    modifier = Modifier.testTag("nav_item_analytics")
+                                    selected = currentScreen is Screen.Insights,
+                                    onClick = { viewModel.navigateTo(Screen.Insights) },
+                                    icon = { Icon(imageVector = Icons.Default.Build, contentDescription = "Insights") },
+                                    label = { Text("Insights") },
+                                    modifier = Modifier.testTag("nav_item_insights")
                                 )
                             }
                         }
@@ -90,7 +106,7 @@ class MainActivity : ComponentActivity() {
                             .background(MaterialTheme.colorScheme.background)
                             .padding(
                                 bottom = if (showBottomBar) innerPadding.calculateBottomPadding() else 0.dp
-                            )
+                             )
                     ) {
                         AnimatedContent(
                             targetState = currentScreen,
@@ -101,10 +117,11 @@ class MainActivity : ComponentActivity() {
                         ) { screen ->
                             when (screen) {
                                 is Screen.Onboarding -> OnboardingScreen(viewModel = viewModel)
-                                is Screen.Dashboard -> DashboardScreen(viewModel = viewModel)
+                                is Screen.Today -> TodayScreen(viewModel = viewModel)
+                                is Screen.Applications -> ApplicationsScreen(viewModel = viewModel)
+                                is Screen.AiInbox -> AiInboxScreen(viewModel = viewModel)
                                 is Screen.Pipeline -> PipelineScreen(viewModel = viewModel)
-                                is Screen.Analytics -> AnalyticsScreen(viewModel = viewModel)
-                                is Screen.GmailSyncReview -> GmailSyncScreen(viewModel = viewModel)
+                                is Screen.Insights -> InsightsScreen(viewModel = viewModel)
                                 is Screen.Detail -> DetailScreen(applicationId = screen.applicationId, viewModel = viewModel)
                             }
                         }

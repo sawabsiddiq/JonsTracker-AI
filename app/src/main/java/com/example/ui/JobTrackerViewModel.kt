@@ -26,10 +26,11 @@ import java.util.Locale
 
 sealed class Screen {
     object Onboarding : Screen()
-    object Dashboard : Screen()
+    object Today : Screen()
+    object Applications : Screen()
+    object AiInbox : Screen()
     object Pipeline : Screen()
-    object Analytics : Screen()
-    object GmailSyncReview : Screen()
+    object Insights : Screen()
     data class Detail(val applicationId: Int) : Screen()
 }
 
@@ -87,7 +88,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             allApplications.first { it.isNotEmpty() }.let {
                 if (_currentScreen.value == Screen.Onboarding) {
-                    navigateTo(Screen.Dashboard)
+                    navigateTo(Screen.Today)
                 }
             }
         }
@@ -100,8 +101,6 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                     val token = _gmailAccessToken.value
                     if (!token.isNullOrEmpty()) {
                         autoScanAndInjectLiveGmail(token)
-                    } else {
-                        simulateIncomingEmailTrigger()
                     }
                 }
             }
@@ -146,7 +145,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
         if (screenStack.isNotEmpty()) {
             _currentScreen.value = screenStack.removeAt(screenStack.size - 1)
         } else {
-            _currentScreen.value = Screen.Dashboard
+            _currentScreen.value = Screen.Today
         }
     }
 
@@ -346,7 +345,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                         _syncError.value = "No job-related updates detected in the latest unparsed emails."
                     } else {
                         _gmailSyncResults.value = pendingResults
-                        navigateTo(Screen.GmailSyncReview)
+                        navigateTo(Screen.AiInbox)
                     }
 
                 } else {
@@ -413,7 +412,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                         _syncError.value = "No job-related updates detected in the latest unparsed emails."
                     } else {
                         _gmailSyncResults.value = pendingResults
-                        navigateTo(Screen.GmailSyncReview)
+                        navigateTo(Screen.AiInbox)
                     }
                 }
             } catch (e: Exception) {
@@ -443,8 +442,12 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                 val extraction = withContext(Dispatchers.IO) { GeminiClient.extractJobDetails(email.body) } ?: generateLocalExtractionFallback(email)
 
                 if (extraction.isJobRelated && extraction.confidence >= 0.82f) {
-                    // Auto-trigger insertion to dashboard pipeline!
-                    injectExtractedJobIntoDatabase(email, extraction)
+                    // Redirect detected live emails into the AI review queue first (No auto-injection)
+                    val currentList = _gmailSyncResults.value.toMutableList()
+                    if (currentList.none { it.first.messageId == email.messageId }) {
+                        currentList.add(email to extraction)
+                        _gmailSyncResults.value = currentList
+                    }
                 } else {
                     // Mark as processed (either irrelevant or ignored)
                     val proceEmail = ProcessedEmail(
@@ -468,41 +471,50 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private var simulatedCounter = 0
-    private suspend fun simulateIncomingEmailTrigger() {
-        simulatedCounter++
-        // Trigger a realistic job application update email event every 4th cycle (4 minutes)
-        if (simulatedCounter % 4 != 0) return
+    fun triggerDemoScan() {
+        viewModelScope.launch {
+            _syncingState.value = true
+            _syncError.value = null
 
-        val companies = listOf("Hugging Face", "Vercel", "Supabase", "Anthropic", "Waymo")
-        val randCompany = companies.random()
-        val emailId = "sim_email_${System.currentTimeMillis()}"
-        val threadId = "sim_thread_${System.currentTimeMillis()}"
+            val companies = listOf("Hugging Face", "Vercel", "Supabase", "Anthropic", "Waymo")
+            val randCompany = companies.random()
+            val emailId = "sim_email_${System.currentTimeMillis()}"
+            val threadId = "sim_thread_${System.currentTimeMillis()}"
 
-        // Generate dynamic mock event body
-        val emailBody = """
-            Hey there!
-            
-            This is a confirmation that we received your engineering portfolio for the Senior Product Software role at $randCompany.
-            
-            Our platform was incredibly impressed, and we'd love to schedule an interview panel with you.
-            
-            Best,
-            $randCompany Career Teams
-        """.trimIndent()
+            val emailBody = """
+                Hey there!
+                
+                This is a confirmation that we received your engineering portfolio for the Senior Product Software role at $randCompany.
+                
+                Our platform was incredibly impressed, and we'd love to schedule an interview panel with you.
+                
+                Best,
+                $randCompany Career Teams
+            """.trimIndent()
 
-        val sampleEmail = DemoEmail(
-            messageId = emailId,
-            threadId = threadId,
-            sender = "$randCompany Careers <jobs@$randCompany.ai>",
-            subject = "Application status update: Interview scheduling at $randCompany",
-            dateString = SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss Z", Locale.getDefault()).format(Date()),
-            body = emailBody,
-            snippet = "Confirming we received your application for Senior Software role. Let's schedule an interview!"
-        )
+            val sampleEmail = DemoEmail(
+                messageId = emailId,
+                threadId = threadId,
+                sender = "$randCompany Careers <jobs@$randCompany.ai>",
+                subject = "Application status update: Interview scheduling at $randCompany",
+                dateString = SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss Z", Locale.getDefault()).format(Date()),
+                body = emailBody,
+                snippet = "Confirming we received your application for Senior Software role. Let's schedule an interview!"
+            )
 
-        val extraction = GeminiClient.extractJobDetails(emailBody) ?: generateLocalExtractionFallback(sampleEmail)
-        injectExtractedJobIntoDatabase(sampleEmail, extraction)
+            val extraction = withContext(Dispatchers.IO) {
+                GeminiClient.extractJobDetails(emailBody) ?: generateLocalExtractionFallback(sampleEmail)
+            }
+
+            val currentList = _gmailSyncResults.value.toMutableList()
+            if (currentList.none { it.first.messageId == sampleEmail.messageId }) {
+                currentList.add(sampleEmail to extraction)
+                _gmailSyncResults.value = currentList
+            }
+
+            _syncingState.value = false
+            _syncError.value = "New AI update for $randCompany added to your AI Inbox review queue!"
+        }
     }
 
     private suspend fun injectExtractedJobIntoDatabase(email: DemoEmail, result: JobExtractionResult) {

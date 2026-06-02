@@ -230,7 +230,7 @@ fun OnboardingScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifi
                             .background(Color.Transparent, RoundedCornerShape(24.dp))
                             .border(2.dp, MaterialTheme.colorScheme.secondary, RoundedCornerShape(24.dp))
                             .springClickable(haptic) {
-                                viewModel.navigateTo(Screen.Dashboard)
+                                viewModel.navigateTo(Screen.Today)
                             }
                             .testTag("skip_to_manual_button"),
                         contentAlignment = Alignment.Center
