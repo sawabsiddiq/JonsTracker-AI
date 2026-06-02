@@ -45,10 +45,16 @@ class GmailSyncWorker(
         val repository = JobRepository(database.jobDao())
 
         val bearer = "Bearer $token"
-        val query = "newer_than:2d"
+        
+        // Read configuration bounds or use safe defaults
+        val scanDays = prefs.getInt("scan_days", 30)
+        val query = "newer_than:${scanDays}d (apply OR application OR interview OR offer OR career OR hiring OR assessment OR resume OR job)"
+        val maxFetch = prefs.getInt("max_messages_to_fetch", 50)
+        val maxAnalyze = prefs.getInt("max_emails_to_analyze", 25)
+        val scanMode = prefs.getString("scan_mode", "Balanced") ?: "Balanced"
 
         try {
-            val listResponse = GmailClient.service.listMessages(bearerToken = bearer, query = query, maxResults = 10)
+            val listResponse = GmailClient.service.listMessages(bearerToken = bearer, query = query, maxResults = maxFetch)
             val messages = listResponse.messages ?: emptyList()
 
             if (messages.isEmpty()) {
@@ -56,22 +62,62 @@ class GmailSyncWorker(
                 return@withContext Result.success()
             }
 
-            val unprocessed = messages.filter { !repository.isEmailProcessed(it.id) }
+            // Deduplicate: skip emails that are either processed or already pending in AI Inbox
+            val unprocessed = messages.filter { 
+                !repository.isEmailProcessed(it.id) && !repository.isPendingAiExtraction(it.id)
+            }
             if (unprocessed.isEmpty()) {
                 Log.d(TAG, "All raw emails are already logged.")
                 return@withContext Result.success()
             }
 
+            var aiScansCount = 0
+
             for (ref in unprocessed) {
+                if (aiScansCount >= maxAnalyze) {
+                    Log.d(TAG, "Reached bg job max AI scan limit ($maxAnalyze)")
+                    break
+                }
+
                 try {
                     val detail = GmailClient.service.getMessage(bearer, ref.id)
                     val email = GmailClient.mapToDemoEmail(detail)
 
-                    // AI extraction with fallback
-                    val extractionResult = GeminiClient.extractJobDetails(email.body)
-                    val finalResult = extractionResult ?: generateLocalExtractionFallback(email)
+                    // Run the exact same filtering checks
+                    val passesFilter = shouldAnalyzeLocalFilter(email.subject, email.snippet, email.body, scanMode)
+                    if (!passesFilter) {
+                        val logEmail = ProcessedEmail(
+                            gmailMessageId = email.messageId,
+                            threadId = email.threadId,
+                            subject = email.subject,
+                            sender = email.sender,
+                            dateString = email.dateString,
+                            snippet = email.snippet,
+                            classification = "irrelevant",
+                            confidence = 1.0f,
+                            linkedApplicationId = null
+                        )
+                        repository.insertProcessedEmail(logEmail)
+                        continue
+                    }
 
-                    if (finalResult.isJobRelated && finalResult.confidence >= 0.82f) {
+                    // Trim body to prevent excess token usage
+                    val trimmedBody = if (email.body.length > 4000) email.body.substring(0, 4000) else email.body
+                    aiScansCount++
+
+                    // AI extraction with fallback
+                    val extractionResult = try {
+                        GeminiClient.extractJobDetails(trimmedBody)
+                    } catch (e: Exception) {
+                        null
+                    }
+
+                    val finalResult = extractionResult ?: createNeedsManualReviewResult(email, "AI Extraction failed or timed out")
+
+                    if (finalResult.isJobRelated) {
+                        // Truncated body for local storage (500 to 1000 characters excerpt max)
+                        val bodyExcerpt = if (email.body.length > 1000) email.body.substring(0, 1000) else email.body
+
                         // Persist to pending AI approvals table so user can review/edit/confirm
                         val pending = PendingAiExtraction(
                             messageId = email.messageId,
@@ -79,7 +125,7 @@ class GmailSyncWorker(
                             sender = email.sender,
                             subject = email.subject,
                             dateString = email.dateString,
-                            body = email.body,
+                            bodyExcerpt = bodyExcerpt,
                             snippet = email.snippet,
                             isJobRelated = finalResult.isJobRelated,
                             confidence = finalResult.confidence,
@@ -91,7 +137,7 @@ class GmailSyncWorker(
                             deadline = finalResult.deadline,
                             recruiterName = finalResult.recruiterName,
                             recruiterEmail = finalResult.recruiterEmail,
-                            source = finalResult.source,
+                            source = finalResult.source ?: "Gmail",
                             summary = finalResult.summary,
                             nextAction = finalResult.nextAction,
                             followUpDate = finalResult.followUpDate
@@ -123,57 +169,60 @@ class GmailSyncWorker(
         }
     }
 
-    private fun generateLocalExtractionFallback(email: DemoEmail): JobExtractionResult {
-        val subject = email.subject.lowercase()
-        val body = email.body.lowercase()
+    private fun shouldAnalyzeLocalFilter(subject: String, snippet: String, body: String, mode: String): Boolean {
+        val subLower = subject.lowercase()
+        val snipLower = snippet.lowercase()
+        val bodyLower = body.lowercase()
 
-        val isJob = subject.contains("apply") || subject.contains("application") ||
-                subject.contains("status") || subject.contains("interview") ||
-                subject.contains("offer") || subject.contains("careers") ||
-                subject.contains("hiring") || subject.contains("assessment") ||
-                body.contains("thank you for applying") || body.contains("coding challenge")
-
-        if (!isJob) {
-            return JobExtractionResult(isJobRelated = false, confidence = 0.90f, eventType = "irrelevant")
+        // Block obvious spam or billing alerts commonly matching keywords
+        if (subLower.contains("receipt") || subLower.contains("invoice") || subLower.contains("billing") ||
+            subLower.contains("transaction") || subLower.contains("subscription") || subLower.contains("payment") ||
+            subLower.contains("your order") || subLower.contains("shipped") || subLower.contains("delivery") ||
+            subLower.contains("coupon") || subLower.contains("deal of the day") || subLower.contains("newsletter") ||
+            subLower.contains("unlimited plans") || subLower.contains("security alert") || subLower.contains("verify your account")
+        ) {
+            return false
         }
 
-        val company = when {
-            subject.contains("google") -> "Google"
-            subject.contains("stripe") -> "Stripe"
-            subject.contains("meta") -> "Meta"
-            subject.contains("apple") -> "Apple"
-            subject.contains("netflix") -> "Netflix"
-            subject.contains("amazon") -> "Amazon"
-            else -> "Unknown Company"
+        return when (mode.trim().lowercase()) {
+            "low cost" -> {
+                subLower.contains("apply") || subLower.contains("application") ||
+                        subLower.contains("status") || subLower.contains("interview") ||
+                        subLower.contains("offer") || subLower.contains("careers") ||
+                        subLower.contains("hiring") || subLower.contains("assessment") ||
+                        subLower.contains("congratulations") || subLower.contains("next steps") ||
+                        snipLower.contains("schedule your interview") || snipLower.contains("coding challenge")
+            }
+            "balanced" -> {
+                subLower.contains("apply") || subLower.contains("application") ||
+                        subLower.contains("status") || subLower.contains("interview") ||
+                        subLower.contains("offer") || subLower.contains("careers") ||
+                        subLower.contains("hiring") || subLower.contains("assessment") ||
+                        subLower.contains("congratulations") || subLower.contains("next steps") ||
+                        subLower.contains("job") || subLower.contains("resume") ||
+                        subLower.contains("candidate") || subLower.contains("recruiting") ||
+                        snipLower.contains("apply") || snipLower.contains("application") ||
+                        snipLower.contains("interview") || snipLower.contains("offer") ||
+                        snipLower.contains("hiring") || snipLower.contains("job") ||
+                        bodyLower.contains("thank you for applying") || bodyLower.contains("coding challenge")
+            }
+            else -> {
+                // Thorough: let everything through
+                true
+            }
         }
+    }
 
-        val type = when {
-            subject.contains("offer") -> "offer"
-            subject.contains("interview") || body.contains("schedule your interview") -> "interview_invitation"
-            subject.contains("assessment") || body.contains("coding challenge") || body.contains("hackerrank") -> "assessment_invitation"
-            subject.contains("thank you") || body.contains("application received") -> "application_confirmation"
-            subject.contains("rejection") || body.contains("not moving forward") -> "rejection"
-            else -> "recruiter_reply"
-        }
-
-        val status = when (type) {
-            "offer" -> "Offer"
-            "interview_invitation" -> "Interview"
-            "assessment_invitation" -> "Assessment"
-            "application_confirmation" -> "Applied"
-            "rejection" -> "Rejected"
-            else -> "Recruiter replied"
-        }
-
+    private fun createNeedsManualReviewResult(email: DemoEmail, reason: String = "AI Parse Failed"): JobExtractionResult {
         return JobExtractionResult(
             isJobRelated = true,
-            confidence = 0.85f,
-            eventType = type,
-            companyName = company,
-            jobTitle = "Software Developer",
-            applicationStatus = status,
-            summary = "Heuristic match: ${email.subject}",
-            nextAction = "Verify and confirm this entry",
+            confidence = 0.5f,
+            eventType = "follow_up_needed",
+            companyName = "Needs Verification",
+            jobTitle = "Verify Role",
+            applicationStatus = "Applied",
+            summary = "Needs manual review ($reason). Original subject: ${email.subject}",
+            nextAction = "Verify and correct any missing company, role, or status details manually.",
             source = "Gmail"
         )
     }

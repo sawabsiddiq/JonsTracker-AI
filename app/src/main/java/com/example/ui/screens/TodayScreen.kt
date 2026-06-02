@@ -114,18 +114,6 @@ fun TodayScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier) {
                     }
                 },
                 actions = {
-                    TextButton(
-                        onClick = { 
-                            haptic?.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                            viewModel.triggerDemoScan() 
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = SleekPrimary),
-                        modifier = Modifier.testTag("load_demo_data_button")
-                    ) {
-                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text("Simulate Email", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
                     IconButton(
                         onClick = {
                             viewModel.navigateTo(Screen.Settings)

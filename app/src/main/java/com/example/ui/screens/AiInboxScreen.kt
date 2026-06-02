@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.border
@@ -141,9 +142,7 @@ fun AiInboxScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier)
                 ) {
                     EmptyStatePanel(
                         title = "Your review queue is clean",
-                        subtitle = "Intelligent nodes found in email scans appear here before affecting active opportunity logs.",
-                        buttonText = "Simulate New Inbox Email",
-                        onButtonClick = { viewModel.triggerDemoScan() }
+                        subtitle = "Intelligent nodes found in email scans appear here before affecting active opportunity logs."
                     )
                 }
             } else {
@@ -173,11 +172,6 @@ fun AiInboxScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier)
 
         // Setup Dialog modal
         if (showSetupInstructions) {
-            val liveToken by viewModel.gmailAccessToken.collectAsState()
-            val autoSync by viewModel.autoSyncEnabled.collectAsState()
-            var tokenInput by remember(liveToken) { mutableStateOf(liveToken ?: "") }
-            var isDeveloperMode by remember { mutableStateOf(false) }
-
             AlertDialog(
                 onDismissRequest = { showSetupInstructions = false },
                 title = { Text("Gmail Intelligent Connection", fontWeight = FontWeight.Bold, color = SleekSecondary) },
@@ -199,68 +193,31 @@ fun AiInboxScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier)
                         // Connect Button representing future OAuth flow structure
                         Button(
                             onClick = { 
-                                haptic?.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                viewModel.saveGmailToken("ya29.mock-oauth-token-precompiled")
-                                showSetupInstructions = false
+                                // Disabled in production without real OAuth configured
                             },
+                            enabled = false,
                             modifier = Modifier.fillMaxWidth().height(44.dp),
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = SleekPrimary)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SleekPrimary,
+                                disabledContainerColor = SleekPrimary.copy(alpha = 0.5f),
+                                disabledContentColor = Color.White.copy(alpha = 0.6f)
+                            )
                         ) {
-                            Icon(imageVector = Icons.Default.Done, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Connect via Google Calendar/Gmail", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Connect via Google Calendar/Gmail", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Developer Mode toggle to hide ya29. paste from normal users
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Developer Sandbox Mode", style = MaterialTheme.typography.labelMedium, color = SleekSecondary)
-                            Switch(
-                                checked = isDeveloperMode,
-                                onCheckedChange = { isDeveloperMode = it },
-                                modifier = Modifier.testTag("developer_mode_switch")
-                            )
-                        }
-
-                        if (isDeveloperMode) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            OutlinedTextField(
-                                value = tokenInput,
-                                onValueChange = { tokenInput = it },
-                                label = { Text("Manual OAuth Token (ya29...)") },
-                                trailingIcon = {
-                                    if (tokenInput.isNotEmpty()) {
-                                        IconButton(onClick = { tokenInput = "" }) {
-                                            Icon(imageVector = Icons.Default.Clear, contentDescription = "Clear")
-                                        }
-                                    }
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = SleekPrimary,
-                                    unfocusedBorderColor = SleekBorder
-                                ),
-                                modifier = Modifier.fillMaxWidth().testTag("token_input_field")
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Button(
-                                onClick = {
-                                    viewModel.saveGmailToken(tokenInput.ifEmpty { null })
-                                    showSetupInstructions = false
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = SleekPrimary),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Apply Sandbox Token", fontWeight = FontWeight.Bold)
-                            }
-                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Gmail connection requires production OAuth setup.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 },
                 confirmButton = {

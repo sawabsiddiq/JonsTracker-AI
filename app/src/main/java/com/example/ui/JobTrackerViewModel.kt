@@ -17,7 +17,6 @@ import com.example.data.repository.JobRepository
 import com.example.data.remote.DemoEmail
 import com.example.data.remote.GeminiClient
 import com.example.data.remote.GmailClient
-import com.example.data.remote.GmailDemoData
 import com.example.data.remote.JobExtractionResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -174,7 +173,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                         sender = pending.sender,
                         subject = pending.subject,
                         dateString = pending.dateString,
-                        body = pending.body,
+                        body = pending.bodyExcerpt,
                         snippet = pending.snippet
                     )
                     val result = JobExtractionResult(
@@ -210,7 +209,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
         _gmailAccessToken.value = token
         if (!token.isNullOrEmpty()) {
             scheduleBackgroundSync()
-            scanGmail(demoMode = false)
+            scanGmail()
         } else {
             cancelBackgroundSync()
         }
@@ -496,7 +495,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
 
     // --- Gmail Syncer logic (Option A) ---
 
-    fun scanGmail(demoMode: Boolean = true, customApiKey: String? = null) {
+    fun scanGmail() {
         viewModelScope.launch {
             _syncingState.value = true
             _syncError.value = null
@@ -510,16 +509,26 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
             _scanProgressDetected.value = 0
             _scanLimitReached.value = false
 
+            if (SecurePrefsManager.hasFailed) {
+                _syncingState.value = false
+                _syncError.value = "Security Error: Encrypted storage failed to initialize. Gmail integration is safely disabled."
+                return@launch
+            }
+
+            val token = _gmailAccessToken.value
+            if (token.isNullOrEmpty()) {
+                _syncingState.value = false
+                _syncErrorType.value = SyncErrorType.AuthFailure
+                _syncError.value = "Gmail connection requires production OAuth setup."
+                return@launch
+            }
+
             var success = true
             try {
-                // If there's an active token stored, we can perform a real live scan
-                val token = _gmailAccessToken.value
-                val isRealLive = !demoMode && !token.isNullOrEmpty()
-
                 var totalCharactersSent = 0
                 val maxCharsPerScan = 100000 // cost budget cap limit
 
-                if (isRealLive && token != null) {
+                if (token != null) {
                     val bearer = "Bearer $token"
                     val days = _scanDays.value
                     var query = "newer_than:${days}d (apply OR application OR interview OR offer OR career OR hiring OR assessment OR resume OR job)"
@@ -665,131 +674,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                                     sender = email.sender,
                                     subject = email.subject,
                                     dateString = email.dateString,
-                                    body = email.body,
-                                    snippet = email.snippet,
-                                    isJobRelated = result.isJobRelated,
-                                    confidence = result.confidence,
-                                    eventType = result.eventType,
-                                    companyName = result.companyName,
-                                    jobTitle = result.jobTitle,
-                                    applicationStatus = result.applicationStatus,
-                                    eventDate = result.eventDate,
-                                    deadline = result.deadline,
-                                    recruiterName = result.recruiterName,
-                                    recruiterEmail = result.recruiterEmail,
-                                    source = result.source ?: "Gmail",
-                                    summary = result.summary,
-                                    nextAction = result.nextAction,
-                                    followUpDate = result.followUpDate
-                                )
-                                repository.insertPendingExtraction(pendingEntity)
-                            }
-                        }
-                        navigateTo(Screen.AiInbox)
-                    }
-
-                } else {
-                    // DEMO AND SIMULATED ENGINE FOR EXECUTING HIGH QUALITY REVIEWS IN SANDBOX
-                    val unprocessed = GmailDemoData.presetEmails.filter { email ->
-                        !repository.isEmailProcessed(email.messageId)
-                    }
-                    _scanProgressFound.value = GmailDemoData.presetEmails.size
-
-                    if (unprocessed.isEmpty()) {
-                        withContext(Dispatchers.Main) {
-                            _syncErrorType.value = SyncErrorType.DuplicateJobUpdate
-                            _syncError.value = "Duplicate update: Your inbox is secure and fully synced. No new un-processed job related emails found!"
-                        }
-                        return@launch
-                    }
-
-                    val maxToAnalyze = _maxEmailsToAnalyze.value
-                    _scanProgressSkipped.value = GmailDemoData.presetEmails.size - unprocessed.size
-
-                    val pendingResults = mutableListOf<Pair<DemoEmail, JobExtractionResult>>()
-
-                    withContext(Dispatchers.IO) {
-                        for (email in unprocessed) {
-                            // Check scan budget caps
-                            if (_scanProgressAnalyzed.value >= maxToAnalyze) {
-                                _scanLimitReached.value = true
-                                _syncError.value = "Scan paused because your selected scan limit was reached."
-                                break
-                            }
-                            if (totalCharactersSent >= maxCharsPerScan) {
-                                _scanLimitReached.value = true
-                                _syncError.value = "Scan paused because your selected scan limit was reached."
-                                break
-                            }
-
-                            // Apply local filters dynamically in simulation to make it authentic!
-                            val passesFilter = shouldAnalyzeLocalFilter(email.subject, email.snippet, email.body, _scanMode.value)
-                            if (!passesFilter) {
-                                val logEmail = ProcessedEmail(
-                                    gmailMessageId = email.messageId,
-                                    threadId = email.threadId,
-                                    subject = email.subject,
-                                    sender = email.sender,
-                                    dateString = email.dateString,
-                                    snippet = email.snippet,
-                                    classification = "irrelevant",
-                                    confidence = 1.0f,
-                                    linkedApplicationId = null
-                                )
-                                repository.insertProcessedEmail(logEmail)
-                                _scanProgressSkipped.value += 1
-                                continue
-                            }
-
-                            val trimmedBody = if (email.body.length > 4000) email.body.substring(0, 4000) else email.body
-                            totalCharactersSent += trimmedBody.length
-                            _scanProgressAnalyzed.value += 1
-
-                            val extractionResult = try {
-                                GeminiClient.extractJobDetails(trimmedBody)
-                            } catch (e: Exception) {
-                                null
-                            }
-
-                            if (extractionResult != null) {
-                                if (extractionResult.isJobRelated) {
-                                    pendingResults.add(email to extractionResult)
-                                    _scanProgressDetected.value += 1
-                                } else {
-                                    val logEmail = ProcessedEmail(
-                                        gmailMessageId = email.messageId,
-                                        threadId = email.threadId,
-                                        subject = email.subject,
-                                        sender = email.sender,
-                                        dateString = email.dateString,
-                                        snippet = email.snippet,
-                                        classification = "irrelevant",
-                                        confidence = extractionResult.confidence,
-                                        linkedApplicationId = null
-                                    )
-                                    repository.insertProcessedEmail(logEmail)
-                                    _scanProgressSkipped.value += 1
-                                }
-                            } else {
-                                // Fallback prediction in case API Key is missing or invalid so the applet is beautiful and robust
-                                val fallbackResult = createNeedsManualReviewResult(email, "Mock API parse bypass")
-                                pendingResults.add(email to fallbackResult)
-                                _scanProgressDetected.value += 1
-                            }
-                        }
-                    }
-
-                    if (pendingResults.isNotEmpty()) {
-                        // Persist these to SQLite so that AI Inbox reviews are non-volatile
-                        withContext(Dispatchers.IO) {
-                            pendingResults.forEach { (email, result) ->
-                                val pendingEntity = PendingAiExtraction(
-                                    messageId = email.messageId,
-                                    threadId = email.threadId,
-                                    sender = email.sender,
-                                    subject = email.subject,
-                                    dateString = email.dateString,
-                                    body = email.body,
+                                    bodyExcerpt = email.body.take(1000),
                                     snippet = email.snippet,
                                     isJobRelated = result.isJobRelated,
                                     confidence = result.confidence,
@@ -866,52 +751,6 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
             }
         } catch (e: Exception) {
             Log.e("BackgroundScanner", "Periodic live back-sync error: ${e.message}")
-        }
-    }
-
-    fun triggerDemoScan() {
-        viewModelScope.launch {
-            _syncingState.value = true
-            _syncError.value = null
-
-            val companies = listOf("Hugging Face", "Vercel", "Supabase", "Anthropic", "Waymo")
-            val randCompany = companies.random()
-            val emailId = "sim_email_${System.currentTimeMillis()}"
-            val threadId = "sim_thread_${System.currentTimeMillis()}"
-
-            val emailBody = """
-                Hey there!
-                
-                This is a confirmation that we received your engineering portfolio for the Senior Product Software role at $randCompany.
-                
-                Our platform was incredibly impressed, and we'd love to schedule an interview panel with you.
-                
-                Best,
-                $randCompany Career Teams
-            """.trimIndent()
-
-            val sampleEmail = DemoEmail(
-                messageId = emailId,
-                threadId = threadId,
-                sender = "$randCompany Careers <jobs@$randCompany.ai>",
-                subject = "Application status update: Interview scheduling at $randCompany",
-                dateString = SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss Z", Locale.getDefault()).format(Date()),
-                body = emailBody,
-                snippet = "Confirming we received your application for Senior Software role. Let's schedule an interview!"
-            )
-
-            val extraction = withContext(Dispatchers.IO) {
-                GeminiClient.extractJobDetails(emailBody) ?: generateLocalExtractionFallback(sampleEmail)
-            }
-
-            val currentList = _gmailSyncResults.value.toMutableList()
-            if (currentList.none { it.first.messageId == sampleEmail.messageId }) {
-                currentList.add(sampleEmail to extraction)
-                _gmailSyncResults.value = currentList
-            }
-
-            _syncingState.value = false
-            _syncError.value = "New AI update for $randCompany added to your AI Inbox review queue!"
         }
     }
 

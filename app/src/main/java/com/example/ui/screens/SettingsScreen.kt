@@ -42,7 +42,6 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showSyncClearDialog by remember { mutableStateOf(false) }
-    var tapCount by remember { mutableStateOf(0) }
 
     Scaffold(
         topBar = {
@@ -58,13 +57,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                         Text(
                             text = "Settings Vault",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black, fontSize = 20.sp),
-                            color = SleekSecondary,
-                            modifier = Modifier.clickable {
-                                tapCount++
-                                if (tapCount == 7) {
-                                    Toast.makeText(context, "Developer Sandbox Mode enabled!", Toast.LENGTH_SHORT).show()
-                                }
-                            }
+                            color = SleekSecondary
                         )
                     }
                 },
@@ -562,16 +555,16 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
-                        text = "🛡️ Privacy Policy placeholder",
+                        text = "🔒 Privacy Policy",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                         color = SleekPrimary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Your data privacy is our absolute priority. This application implements the following strict boundaries:\n\n" +
-                                "1. LOCAL ONLY PERSISTENCE: Your credentials, email metadata, matches, and pipeline steps are written and stored client-side in secure offline SQLite DB layers. We execute no analytical tracking, telemetry, or remote collection.\n\n" +
-                                "2. PRIVACY PLACEHOLDER: Full Privacy Policy details are governed directly by local client regulations. At no point are raw email contents or body payloads saved remotely.\n\n" +
-                                "3. ZERO-RETENTION COGNITIVE PARSING: Live token extractions are formatted client-side and analyzed directly via encrypted REST API calls to the Google Gemini endpoint. At no point do we retain, pipeline, or feed inputs into third-party vector weights.",
+                                "1. LOCAL ONLY PERSISTENCE: Your credentials, email metadata, matches, and pipeline steps are written and stored client-side in secure offline SQLite database levels. We execute no analytical tracking, telemetry, or remote user profiling.\n\n" +
+                                "2. PRIVACY COMPLIANCE: Full Privacy details conform to standard sandbox regulations. Under no circumstances are raw email contents or body payloads uploaded or cached to external cloud servers.\n\n" +
+                                "3. ZERO-RETENTION COGNITIVE PARSING: Extractions are formatted client-side and analyzed directly via encrypted REST API calls to the Google Gemini endpoint. At no point do we retain, pipeline, or feed inputs into third-party vector weights.",
                         style = MaterialTheme.typography.labelSmall,
                         color = SleekSubtext,
                         lineHeight = 16.sp
@@ -584,44 +577,6 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
-                }
-            }
-
-            // --- EASTER EGG DEVELOPER SANDBOX ---
-            if (tapCount >= 7) {
-                Text(
-                    text = "🛠️ DEVELOPER SANDBOX NODE",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                    color = SleekPrimary
-                )
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Active Token: ${token?.take(15)}...", fontSize = 11.sp, color = SleekSecondary)
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Button(
-                                onClick = { viewModel.scanGmail(demoMode = true) },
-                                colors = ButtonDefaults.buttonColors(containerColor = SleekPrimary),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text("Trigger Demo Scan", fontSize = 11.sp)
-                            }
-                            Button(
-                                onClick = {
-                                    viewModel.clearGmailToken()
-                                    Toast.makeText(context, "Mock Token Flushed", Toast.LENGTH_SHORT).show()
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text("Wipe Access Token", fontSize = 11.sp)
-                            }
-                        }
-                    }
                 }
             }
 

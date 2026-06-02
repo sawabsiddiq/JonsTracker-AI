@@ -55,6 +55,9 @@ interface JobDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPendingExtraction(extraction: PendingAiExtraction): Long
 
+    @Query("SELECT EXISTS(SELECT 1 FROM pending_ai_extractions WHERE messageId = :messageId)")
+    suspend fun isPendingAiExtraction(messageId: String): Boolean
+
     @Query("DELETE FROM pending_ai_extractions WHERE messageId = :messageId")
     suspend fun deletePendingExtractionById(messageId: String)
 

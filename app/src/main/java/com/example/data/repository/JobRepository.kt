@@ -58,6 +58,10 @@ class JobRepository(private val jobDao: JobDao) {
         return jobDao.insertPendingExtraction(extraction)
     }
 
+    suspend fun isPendingAiExtraction(messageId: String): Boolean {
+        return jobDao.isPendingAiExtraction(messageId)
+    }
+
     suspend fun deletePendingExtractionById(messageId: String) {
         jobDao.deletePendingExtractionById(messageId)
     }

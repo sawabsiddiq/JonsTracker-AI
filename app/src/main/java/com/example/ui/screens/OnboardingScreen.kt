@@ -200,7 +200,7 @@ fun OnboardingScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifi
                         )
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    // Launch Smart Gmail Demo Box Button
+                    // Get Started Box Button
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -208,37 +208,15 @@ fun OnboardingScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifi
                             .cyberShadow(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary, 4.dp, 24.dp)
                             .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(24.dp))
                             .springClickable(haptic) {
-                                viewModel.scanGmail(demoMode = true)
+                                viewModel.navigateTo(Screen.Today)
                             }
                             .testTag("scan_gmail_button"),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Launch Smart Gmail Demo",
+                            text = "Get Started",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
                             color = Color.White
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    // Configure Pipeline Manually Outlined Box Button
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .background(Color.Transparent, RoundedCornerShape(24.dp))
-                            .border(2.dp, MaterialTheme.colorScheme.secondary, RoundedCornerShape(24.dp))
-                            .springClickable(haptic) {
-                                viewModel.navigateTo(Screen.Today)
-                            }
-                            .testTag("skip_to_manual_button"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Configure Pipeline Manually",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.secondary
                         )
                     }
 

@@ -56,7 +56,7 @@ data class PendingAiExtraction(
     val sender: String,
     val subject: String,
     val dateString: String,
-    val body: String,
+    val bodyExcerpt: String,
     val snippet: String,
     val isJobRelated: Boolean,
     val confidence: Float,
