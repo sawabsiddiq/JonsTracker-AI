@@ -322,7 +322,14 @@ fun PipelineStageBarChart(
                                     .fillMaxWidth(ratio)
                                     .fillMaxHeight()
                                     .background(
-                                        getStatusColor(if (stage.first == "Test") "Assessment" else if (stage.first == "Rejects") "Rejected" else stage.first),
+                                        getStatusColor(
+                                        when (stage.first) {
+                                            "Test" -> "Assessment"
+                                            "Rejects" -> "Rejected"
+                                            "Replied" -> "Recruiter replied"
+                                            else -> stage.first
+                                        }
+                                    ),
                                         RoundedCornerShape(4.dp)
                                     )
                             )

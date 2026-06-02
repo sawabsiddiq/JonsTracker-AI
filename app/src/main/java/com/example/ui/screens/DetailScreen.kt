@@ -532,7 +532,7 @@ fun EditApplicationDialog(
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text("Save Details", color = Color.Black)
+                Text("Save Details", color = Color.White)
             }
         },
         dismissButton = {
@@ -611,7 +611,7 @@ fun AddMilestoneDialog(
                 onClick = { if (summary.isNotEmpty()) onAdd(selectedType, summary) },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text("Save Milestone", color = Color.Black)
+                Text("Save Milestone", color = Color.White)
             }
         },
         dismissButton = {

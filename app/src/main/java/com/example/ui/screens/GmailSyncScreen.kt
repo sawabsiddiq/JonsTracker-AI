@@ -240,7 +240,7 @@ fun ReviewCard(
                     contentPadding = PaddingValues(horizontal = 12.dp),
                     modifier = Modifier.weight(1.5f).size(42.dp)
                 ) {
-                    Text("Confirm", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Confirm", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
 
                 OutlinedButton(
@@ -383,7 +383,7 @@ fun EditExtractionDialog(
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text("Confirm Sanitized Specs", color = Color.Black)
+                Text("Confirm Sanitized Specs", color = Color.White)
             }
         },
         dismissButton = {

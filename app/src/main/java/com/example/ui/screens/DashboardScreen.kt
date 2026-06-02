@@ -65,6 +65,7 @@ fun DashboardScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifie
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
     ) {
         Column(
             modifier = Modifier
@@ -390,7 +391,7 @@ fun DashboardScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifie
         FloatingActionButton(
             onClick = { showAddDialog = true },
             containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = Color.Black,
+            contentColor = Color.White,
             shape = CircleShape,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -459,7 +460,7 @@ fun DashboardScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifie
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("Scan Demo Scenario Mail", color = Color.Black)
+                        Text("Scan Demo Scenario Mail", color = Color.White)
                     }
                 },
                 dismissButton = {
@@ -795,7 +796,7 @@ fun AddApplicationDialog(
                 onClick = { if (company.isNotEmpty() && title.isNotEmpty()) onAdd(company, title, location, source, status, priority, salary, notes) },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text("Log Application", color = Color.Black)
+                Text("Log Application", color = Color.White)
             }
         },
         dismissButton = {

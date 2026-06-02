@@ -95,7 +95,7 @@ fun PipelineScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                                 Box(
                                     modifier = Modifier
                                         .background(
-                                            if (isActive) Color.Black else MaterialTheme.colorScheme.surface,
+                                            if (isActive) Color.White.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant,
                                             RoundedCornerShape(6.dp)
                                         )
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -103,14 +103,14 @@ fun PipelineScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                                     Text(
                                         text = count.toString(),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                                        color = if (isActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
                         },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = Color.Black
+                            selectedLabelColor = Color.White
                         ),
                         modifier = Modifier
                             .height(40.dp)
