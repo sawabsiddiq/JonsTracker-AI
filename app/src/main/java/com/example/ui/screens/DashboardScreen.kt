@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,10 +38,22 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier) {
+    val haptic = LocalHapticFeedback.current
     val applications by viewModel.allApplications.collectAsState()
     val processedCount by viewModel.processedEmails.collectAsState()
     val syncing by viewModel.syncingState.collectAsState()
     val syncError by viewModel.syncError.collectAsState()
+    val lastGmailScan by viewModel.lastGmailScan.collectAsState()
+    val liveToken by viewModel.gmailAccessToken.collectAsState()
+
+    val lastScanFormatted = remember(lastGmailScan) {
+        if (lastGmailScan == 0L) {
+            "Never synced"
+        } else {
+            val formatter = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+            "Synced: " + formatter.format(Date(lastGmailScan))
+        }
+    }
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showScanInstructions by remember { mutableStateOf(false) }
@@ -120,8 +133,7 @@ fun DashboardScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifie
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            IconButton(
-                                onClick = { showScanInstructions = true },
+                            Box(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .background(
@@ -129,7 +141,10 @@ fun DashboardScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifie
                                         CircleShape
                                     )
                                     .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), CircleShape)
-                                    .testTag("quick_sync_icon")
+                                    .clip(CircleShape)
+                                    .springClickable(haptic) { showScanInstructions = true }
+                                    .testTag("quick_sync_icon"),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
@@ -160,32 +175,212 @@ fun DashboardScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifie
                 }
             }
 
-            // Sync error panel
-            syncError?.let {
+            // Visually integrated Sync Status indicator & quick Sync Now action
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                ),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 4.dp)
+                    .neonGlow(
+                        glowColor = if (syncing) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.secondary.copy(alpha = 0.04f),
+                        borderRadius = 20.dp
+                    )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            if (syncing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(32.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    strokeWidth = 2.5.dp
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(
+                                            if (lastGmailScan == 0L) MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Email,
+                                        contentDescription = "Sync status icon",
+                                        tint = if (lastGmailScan == 0L) MaterialTheme.colorScheme.outline
+                                               else MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .background(
+                                            if (lastGmailScan == 0L) Color.Gray
+                                            else Color(0xFF4CAF50),
+                                            CircleShape
+                                        )
+                                        .border(1.5.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                                        .align(Alignment.BottomEnd)
+                                )
+                            }
+                        }
+
+                        Column {
+                            Text(
+                                text = if (syncing) "Syncing messages..." else "Gmail AI Processor",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Text(
+                                text = lastScanFormatted,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.62f)
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .height(38.dp)
+                            .background(
+                                if (syncing) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary,
+                                RoundedCornerShape(16.dp)
+                            )
+                            .clip(RoundedCornerShape(16.dp))
+                            .springClickable(haptic) {
+                                if (!syncing) {
+                                    viewModel.scanGmail(demoMode = liveToken.isNullOrBlank())
+                                }
+                            }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .testTag("sync_now_header_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = Color.White
+                            )
+                            Text(
+                                text = "Sync Now",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Sync status/error/notice panel
+            syncError?.let { msg ->
+                val isError = msg.contains("error", ignoreCase = true) || msg.contains("fail", ignoreCase = true) || msg.contains("invalid", ignoreCase = true)
+                val isSuccess = msg.contains("reset", ignoreCase = true) || msg.contains("clean", ignoreCase = true) || msg.contains("fully synced", ignoreCase = true) || msg.contains("secure", ignoreCase = true) || msg.contains("analyzed", ignoreCase = true)
+
+                val containerColor = when {
+                    isError -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.22f)
+                    isSuccess -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                }
+                val borderColor = when {
+                    isError -> MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
+                    isSuccess -> MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                    else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                }
+                val icon = when {
+                    isError -> Icons.Default.Warning
+                    isSuccess -> Icons.Default.CheckCircle
+                    else -> Icons.Default.Info
+                }
+                val tintColor = when {
+                    isError -> MaterialTheme.colorScheme.error
+                    isSuccess -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.secondary
+                }
+                val textColor = when {
+                    isError -> MaterialTheme.colorScheme.onErrorContainer
+                    isSuccess -> MaterialTheme.colorScheme.onPrimaryContainer
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)),
-                    shape = RoundedCornerShape(24.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                    colors = CardDefaults.cardColors(containerColor = containerColor),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, borderColor),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp, vertical = 8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = "Sync Notice",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = "Notification",
+                                tint = tintColor,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = msg,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = textColor,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        // Under information messages, play with an inline interactive "Reset Simulation Logs" triggers
+                        if (!isError) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            HorizontalDivider(color = borderColor.copy(alpha = 0.3f), thickness = 0.8.dp)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .clickable { viewModel.resetSyncLogs() }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Reset scan metadata",
+                                        tint = tintColor,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Reset Sync Demo",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = tintColor
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -378,9 +573,31 @@ fun DashboardScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifie
             } else {
                 // Show latest 3 applications
                 applications.take(3).forEach { app ->
-                    RecentAppCard(app = app, onClick = {
-                        viewModel.navigateTo(Screen.Detail(app.id))
-                    })
+                    RecentAppCard(
+                        app = app,
+                        onClick = {
+                            viewModel.navigateTo(Screen.Detail(app.id))
+                        },
+                        onStatusChange = { newStatus ->
+                            viewModel.updateApplicationDetails(app.copy(currentStatus = newStatus))
+                            viewModel.addTimelineEvent(
+                                appId = app.id,
+                                type = when (newStatus) {
+                                    "Saved" -> "unknown"
+                                    "Applied" -> "application_confirmation"
+                                    "Recruiter replied" -> "recruiter_reply"
+                                    "Assessment" -> "assessment_invitation"
+                                    "Interview" -> "interview_invitation"
+                                    "Offer" -> "offer"
+                                    "Rejected" -> "rejection"
+                                    "Ghosted" -> "ghosted"
+                                    else -> "unknown"
+                                },
+                                summary = "Status updated manually from dashboard to '$newStatus'.",
+                                timestamp = System.currentTimeMillis()
+                            )
+                        }
+                    )
                 }
             }
 
@@ -388,17 +605,24 @@ fun DashboardScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifie
         }
 
         // Floating manual addition button
-        FloatingActionButton(
-            onClick = { showAddDialog = true },
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = Color.White,
-            shape = CircleShape,
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 96.dp, end = 24.dp)
-                .testTag("add_manual_app_fab")
+                .size(56.dp)
+                .cyberShadow(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary, 4.dp, 24.dp)
+                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                .clip(CircleShape)
+                .springClickable(haptic) { showAddDialog = true }
+                .testTag("add_manual_app_fab"),
+            contentAlignment = Alignment.Center
         ) {
-            Icon(imageVector = Icons.Default.Add, contentDescription = "Add manual application log")
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Add manual application log",
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
         }
 
         // 1. Manual Application entry dialog:
@@ -424,48 +648,221 @@ fun DashboardScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifie
 
         // 2. Scan Gmail dialog / choice selector:
         if (showScanInstructions) {
+            val liveToken by viewModel.gmailAccessToken.collectAsState()
+            val autoSync by viewModel.autoSyncEnabled.collectAsState()
+            var tokenInput by remember(liveToken) { mutableStateOf(liveToken ?: "") }
+            var showHelpInstructions by remember { mutableStateOf(false) }
+
             AlertDialog(
                 onDismissRequest = { showScanInstructions = false },
-                title = { Text("Synchronize with Gemini AI") },
-                text = {
-                    Column {
-                        Text(
-                            "This triggers an inbox scan using the query recommended in Google's Gmail API docs:",
-                            style = MaterialTheme.typography.bodyMedium
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Email,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .background(MaterialTheme.colorScheme.background, RoundedCornerShape(6.dp))
-                                .padding(8.dp)
+                        Text(
+                            "Gmail Intelligent Sync Setup",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
+                        )
+                    }
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            "Sync and scan real Gmail conversations of the last 15 days using our advanced Gemini classification models.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+
+                        // Clean step-by-step assistant box for better UX
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (showHelpInstructions)
+                                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f)
+                                else
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(
+                                1.dp,
+                                if (showHelpInstructions)
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                else
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showHelpInstructions = !showHelpInstructions }
+                                    .padding(12.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = "Setup Instructions (Live Gmail)",
+                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = if (showHelpInstructions) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Toggle Instructions",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                if (showHelpInstructions) {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text(
+                                        text = "Since the browser streaming emulator runs in a sandbox and does not support Google custom sign-in popups, please supply a temporary Access Token:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    val steps = listOf(
+                                        "1. Navigate to: developers.google.com/oauthplayground",
+                                        "2. Under Step 1, select 'Gmail API v1' and check: https://www.googleapis.com/auth/gmail.readonly",
+                                        "3. Click 'Authorize APIs' & authorize your Gmail account,",
+                                        "4. Click 'Exchange authorization code' & copy the 'Access Token' (starts with ya29.)"
+                                    )
+
+                                    steps.forEach { step ->
+                                        Text(
+                                            text = step,
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(vertical = 2.dp)
+                                        )
+                                    }
+                                } else {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Click to view 4 simple steps to connect your actual inbox.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            "Google Account Authorization Token:",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+
+                        OutlinedTextField(
+                            value = tokenInput,
+                            onValueChange = { tokenInput = it },
+                            placeholder = { Text("Paste 'ya29...' access token here.") },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("gmail_oauth_token_input"),
+                            trailingIcon = {
+                                if (liveToken != null) {
+                                    IconButton(
+                                        onClick = {
+                                            viewModel.clearGmailToken()
+                                            tokenInput = ""
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Disconnect Account",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        )
+
+                        if (!liveToken.isNullOrEmpty()) {
                             Text(
-                                "(\"application\" OR \"applied\" OR \"interview\" OR \"assessment\" OR \"unfortunately\") newer_than:90d",
+                                "✓ Connected to Google Services",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = StatusOffer
+                            )
+                        } else {
+                            Text(
+                                "Using sandbox presets if empty. Connect above to scan live.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.outline
                             )
                         }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            "Using the Secure Demo Scenario Mode allows Gemini to scan preloaded transcripts (Google confirmation, Stripe Online assessment, Apple PM Offer details, Meta scheduling). This does not touch your actual private Google Account content.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Real-Time Auto-Sync Events",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                                )
+                                Text(
+                                    "Continuously analyze upcoming email updates of jobs automatically.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                            Switch(
+                                checked = autoSync,
+                                onCheckedChange = { viewModel.setAutoSync(it) },
+                                modifier = Modifier.testTag("auto_sync_switch")
+                            )
+                        }
                     }
                 },
                 confirmButton = {
                     Button(
                         onClick = {
                             showScanInstructions = false
-                            viewModel.scanGmail(demoMode = true)
+                            if (tokenInput.isNotBlank()) {
+                                viewModel.saveGmailToken(tokenInput.trim())
+                            } else {
+                                viewModel.scanGmail(demoMode = true)
+                            }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("Scan Demo Scenario Mail", color = Color.White)
+                        Text(if (tokenInput.isNotBlank()) "Authenticate & Scan Live" else "Scan Sandbox Presets", color = Color.White)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showScanInstructions = false }) {
-                        Text("Cancel", color = MaterialTheme.colorScheme.primary)
+                        Text("Cancel")
                     }
                 }
             )
@@ -482,6 +879,7 @@ fun MetricCard(
     color: Color,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(24.dp),
@@ -493,6 +891,7 @@ fun MetricCard(
         ),
         modifier = modifier
             .height(135.dp)
+            .springClickable(haptic) { /* Gentle tactile pop */ }
             .neonGlow(color.copy(alpha = 0.12f), 1.5.dp, 24.dp)
     ) {
         Column(
@@ -570,9 +969,17 @@ fun MiniStatItem(label: String, count: Int, color: Color) {
 }
 
 @Composable
-fun RecentAppCard(app: JobApplication, onClick: () -> Unit) {
+fun RecentAppCard(
+    app: JobApplication,
+    onClick: () -> Unit,
+    onStatusChange: (String) -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
     val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
     val dateString = formatter.format(Date(app.appliedDate))
+
+    val updateFormatter = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+    val updatedDateString = updateFormatter.format(Date(app.updatedAt))
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -581,7 +988,7 @@ fun RecentAppCard(app: JobApplication, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 6.dp)
-            .clickable(onClick = onClick)
+            .springClickable(haptic) { onClick() }
     ) {
         Row(
             modifier = Modifier
@@ -606,36 +1013,83 @@ fun RecentAppCard(app: JobApplication, onClick: () -> Unit) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Applied $dateString",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                    )
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Applied $dateString",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Last updated $updatedDateString",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        )
+                    }
                 }
             }
 
-            // Status chip badge
-            Box(
-                modifier = Modifier
-                    .background(
-                        getStatusColor(app.currentStatus).copy(alpha = 0.15f),
-                        CircleShape
-                    )
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text = app.currentStatus,
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = getStatusColor(app.currentStatus)
-                )
+            // Interactive Status chip badge with ArrowDropDown
+            var expanded by remember { mutableStateOf(false) }
+
+            Box {
+                Box(
+                    modifier = Modifier
+                        .background(
+                            getStatusColor(app.currentStatus).copy(alpha = 0.15f),
+                            CircleShape
+                        )
+                        .clickable { expanded = true }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = app.currentStatus,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = getStatusColor(app.currentStatus)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Edit status",
+                            tint = getStatusColor(app.currentStatus),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    val statusOptions = listOf("Saved", "Applied", "Recruiter replied", "Assessment", "Interview", "Offer", "Rejected", "Ghosted")
+                    statusOptions.forEach { status ->
+                        DropdownMenuItem(
+                            text = { Text(status) },
+                            onClick = {
+                                expanded = false
+                                onStatusChange(status)
+                            }
+                        )
+                    }
+                }
             }
         }
     }

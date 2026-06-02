@@ -47,4 +47,8 @@ class JobRepository(private val jobDao: JobDao) {
     suspend fun isEmailProcessed(messageId: String): Boolean {
         return jobDao.isEmailProcessed(messageId)
     }
+
+    suspend fun deleteAllProcessedEmails() {
+        jobDao.deleteAllProcessedEmails()
+    }
 }

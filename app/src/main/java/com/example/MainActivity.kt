@@ -3,6 +3,7 @@ package com.example
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.*
@@ -39,6 +40,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             MyApplicationTheme {
                 val currentScreen by viewModel.currentScreen.collectAsState()
+
+                // Intercept back gestures globally to avoid exiting the app unexpectedly
+                BackHandler(enabled = currentScreen !is Screen.Dashboard && currentScreen !is Screen.Onboarding) {
+                    viewModel.navigateBack()
+                }
 
                 // Decide whether to show bottom navigation (Suppress it on Onboarding, Sync Review, or Detail views)
                 val showBottomBar = currentScreen !is Screen.Onboarding &&

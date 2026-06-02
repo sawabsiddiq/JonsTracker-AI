@@ -151,6 +151,13 @@ fun DetailScreen(
                         DetailMetaItem(label = "Salary", value = app.salaryRange.ifEmpty { "Not stated" }, icon = Icons.Default.Star, modifier = Modifier.weight(1f))
                         DetailMetaItem(label = "Follow Up", value = if (app.nextAction.isNotEmpty()) app.nextAction else "No tasks set", icon = Icons.Default.Done, modifier = Modifier.weight(1f))
                     }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        val fullDateFormatter = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+                        val updatedFull = fullDateFormatter.format(Date(app.updatedAt))
+                        DetailMetaItem(label = "Last Updated", value = updatedFull, icon = Icons.Default.Refresh, modifier = Modifier.weight(1f))
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
 
                     if (app.notes.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(20.dp))

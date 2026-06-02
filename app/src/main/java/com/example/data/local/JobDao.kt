@@ -44,4 +44,7 @@ interface JobDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM processed_emails WHERE gmailMessageId = :messageId)")
     suspend fun isEmailProcessed(messageId: String): Boolean
+
+    @Query("DELETE FROM processed_emails")
+    suspend fun deleteAllProcessedEmails()
 }

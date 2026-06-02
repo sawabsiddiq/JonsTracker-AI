@@ -55,6 +55,17 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
             initialValue = emptyList()
         )
 
+    private val prefs = application.getSharedPreferences("job_tracker_prefs", android.content.Context.MODE_PRIVATE)
+
+    private val _gmailAccessToken = MutableStateFlow(prefs.getString("gmail_token", null))
+    val gmailAccessToken: StateFlow<String?> = _gmailAccessToken.asStateFlow()
+
+    private val _autoSyncEnabled = MutableStateFlow(prefs.getBoolean("auto_sync", true))
+    val autoSyncEnabled: StateFlow<Boolean> = _autoSyncEnabled.asStateFlow()
+
+    private val _lastGmailScan = MutableStateFlow(prefs.getLong("last_gmail_scan", 0L))
+    val lastGmailScan: StateFlow<Long> = _lastGmailScan.asStateFlow()
+
     private val _currentScreen = MutableStateFlow<Screen>(Screen.Onboarding)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
 
@@ -80,6 +91,50 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
         }
+
+        // Run continuous background / automation scanner loop
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(60000) // check for new email updates / simulation triggers every 60 seconds
+                if (_autoSyncEnabled.value) {
+                    val token = _gmailAccessToken.value
+                    if (!token.isNullOrEmpty()) {
+                        autoScanAndInjectLiveGmail(token)
+                    } else {
+                        simulateIncomingEmailTrigger()
+                    }
+                }
+            }
+        }
+    }
+
+    fun saveGmailToken(token: String?) {
+        prefs.edit().putString("gmail_token", token).apply()
+        _gmailAccessToken.value = token
+        if (!token.isNullOrEmpty()) {
+            scanGmail(demoMode = false)
+        }
+    }
+
+    fun clearGmailToken() {
+        prefs.edit().remove("gmail_token").apply()
+        _gmailAccessToken.value = null
+    }
+
+    fun resetSyncLogs() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteAllProcessedEmails()
+            _lastGmailScan.value = 0L
+            prefs.edit().putLong("last_gmail_scan", 0L).apply()
+            withContext(Dispatchers.Main) {
+                _syncError.value = "Demo scan logs reset! You can now launch a fresh Gmail AI scan simulation."
+            }
+        }
+    }
+
+    fun setAutoSync(enabled: Boolean) {
+        prefs.edit().putBoolean("auto_sync", enabled).apply()
+        _autoSyncEnabled.value = enabled
     }
 
     fun navigateTo(screen: Screen) {
@@ -188,6 +243,12 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    private fun updateLastGmailScanTimestamp() {
+        val now = System.currentTimeMillis()
+        prefs.edit().putLong("last_gmail_scan", now).apply()
+        _lastGmailScan.value = now
+    }
+
     // --- Gmail Syncer logic (Option A) ---
 
     fun scanGmail(demoMode: Boolean = true, customApiKey: String? = null) {
@@ -196,8 +257,99 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
             _syncError.value = null
             _gmailSyncResults.value = emptyList()
 
+            var success = true
             try {
-                if (demoMode) {
+                // If there's an active token stored, we can perform a real live scan
+                val token = _gmailAccessToken.value
+                val isRealLive = !demoMode && !token.isNullOrEmpty()
+
+                if (isRealLive && token != null) {
+                    val bearer = "Bearer $token"
+                    val query = "newer_than:15d"
+
+                    val listResponse = withContext(Dispatchers.IO) {
+                        GmailClient.service.listMessages(bearerToken = bearer, query = query, maxResults = 25)
+                    }
+
+                    val messages = listResponse.messages ?: emptyList()
+                    if (messages.isEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            _syncError.value = "Your inbox is clean and fully synced. No emails found matching 'newer_than:15d'!"
+                            _syncingState.value = false
+                        }
+                        return@launch
+                    }
+
+                    val unprocessed = messages.filter { !repository.isEmailProcessed(it.id) }
+                    if (unprocessed.isEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            _syncError.value = "All emails in the last 15 days are already analyzed and active in your pipeline."
+                            _syncingState.value = false
+                        }
+                        return@launch
+                    }
+
+                    val pendingResults = mutableListOf<Pair<DemoEmail, JobExtractionResult>>()
+
+                    withContext(Dispatchers.IO) {
+                        for (ref in unprocessed) {
+                            try {
+                                val detail = GmailClient.service.getMessage(bearer, ref.id)
+                                val email = GmailClient.mapToDemoEmail(detail)
+
+                                val extractionResult = GeminiClient.extractJobDetails(email.body)
+                                if (extractionResult != null) {
+                                    if (extractionResult.isJobRelated) {
+                                        pendingResults.add(email to extractionResult)
+                                    } else {
+                                        // Ignore completely irrelevant emails
+                                        val logEmail = ProcessedEmail(
+                                            gmailMessageId = email.messageId,
+                                            threadId = email.threadId,
+                                            subject = email.subject,
+                                            sender = email.sender,
+                                            dateString = email.dateString,
+                                            snippet = email.snippet,
+                                            classification = "irrelevant",
+                                            confidence = extractionResult.confidence,
+                                            linkedApplicationId = null
+                                        )
+                                        repository.insertProcessedEmail(logEmail)
+                                    }
+                                } else {
+                                    // Fallback prediction if off-line / key missing
+                                    val fallbackResult = generateLocalExtractionFallback(email)
+                                    if (fallbackResult.isJobRelated) {
+                                        pendingResults.add(email to fallbackResult)
+                                    } else {
+                                        val logEmail = ProcessedEmail(
+                                            gmailMessageId = email.messageId,
+                                            threadId = email.threadId,
+                                            subject = email.subject,
+                                            sender = email.sender,
+                                            dateString = email.dateString,
+                                            snippet = email.snippet,
+                                            classification = "irrelevant",
+                                            confidence = 1.0f,
+                                            linkedApplicationId = null
+                                        )
+                                        repository.insertProcessedEmail(logEmail)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to parse individual live email ${ref.id}", e)
+                            }
+                        }
+                    }
+
+                    if (pendingResults.isEmpty()) {
+                        _syncError.value = "No job-related updates detected in the latest unparsed emails."
+                    } else {
+                        _gmailSyncResults.value = pendingResults
+                        navigateTo(Screen.GmailSyncReview)
+                    }
+
+                } else {
                     val unprocessed = GmailDemoData.presetEmails.filter { email ->
                         !repository.isEmailProcessed(email.messageId)
                     }
@@ -263,18 +415,160 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                         _gmailSyncResults.value = pendingResults
                         navigateTo(Screen.GmailSyncReview)
                     }
-
-                } else {
-                    // Actual Gmail REST integration (if token is passed / auth done)
-                    _syncError.value = "Sign-In with Google Auth Token is required to query live Gmail scopes. Scanning Demo Preset mailbox instead."
-                    scanGmail(demoMode = true)
                 }
             } catch (e: Exception) {
+                success = false
                 Log.e(TAG, "Sync process failed", e)
                 _syncError.value = "Scraper error: ${e.message}"
             } finally {
+                if (success) {
+                    updateLastGmailScanTimestamp()
+                }
                 _syncingState.value = false
             }
+        }
+    }
+
+    private suspend fun autoScanAndInjectLiveGmail(token: String) {
+        val bearer = "Bearer $token"
+        try {
+            val listResponse = withContext(Dispatchers.IO) {
+                GmailClient.service.listMessages(bearerToken = bearer, query = "newer_than:1d", maxResults = 5)
+            }
+            val messages = listResponse.messages ?: emptyList()
+            val unprocessed = messages.filter { !repository.isEmailProcessed(it.id) }
+            for (ref in unprocessed) {
+                val detail = withContext(Dispatchers.IO) { GmailClient.service.getMessage(bearer, ref.id) }
+                val email = GmailClient.mapToDemoEmail(detail)
+                val extraction = withContext(Dispatchers.IO) { GeminiClient.extractJobDetails(email.body) } ?: generateLocalExtractionFallback(email)
+
+                if (extraction.isJobRelated && extraction.confidence >= 0.82f) {
+                    // Auto-trigger insertion to dashboard pipeline!
+                    injectExtractedJobIntoDatabase(email, extraction)
+                } else {
+                    // Mark as processed (either irrelevant or ignored)
+                    val proceEmail = ProcessedEmail(
+                        gmailMessageId = email.messageId,
+                        threadId = email.threadId,
+                        sender = email.sender,
+                        subject = email.subject,
+                        dateString = email.dateString,
+                        snippet = email.snippet,
+                        classification = if (extraction.isJobRelated) "low_confidence_skipped" else "irrelevant",
+                        confidence = extraction.confidence,
+                        linkedApplicationId = null
+                    )
+                    withContext(Dispatchers.IO) {
+                        repository.insertProcessedEmail(proceEmail)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("BackgroundScanner", "Periodic live back-sync error: ${e.message}")
+        }
+    }
+
+    private var simulatedCounter = 0
+    private suspend fun simulateIncomingEmailTrigger() {
+        simulatedCounter++
+        // Trigger a realistic job application update email event every 4th cycle (4 minutes)
+        if (simulatedCounter % 4 != 0) return
+
+        val companies = listOf("Hugging Face", "Vercel", "Supabase", "Anthropic", "Waymo")
+        val randCompany = companies.random()
+        val emailId = "sim_email_${System.currentTimeMillis()}"
+        val threadId = "sim_thread_${System.currentTimeMillis()}"
+
+        // Generate dynamic mock event body
+        val emailBody = """
+            Hey there!
+            
+            This is a confirmation that we received your engineering portfolio for the Senior Product Software role at $randCompany.
+            
+            Our platform was incredibly impressed, and we'd love to schedule an interview panel with you.
+            
+            Best,
+            $randCompany Career Teams
+        """.trimIndent()
+
+        val sampleEmail = DemoEmail(
+            messageId = emailId,
+            threadId = threadId,
+            sender = "$randCompany Careers <jobs@$randCompany.ai>",
+            subject = "Application status update: Interview scheduling at $randCompany",
+            dateString = SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss Z", Locale.getDefault()).format(Date()),
+            body = emailBody,
+            snippet = "Confirming we received your application for Senior Software role. Let's schedule an interview!"
+        )
+
+        val extraction = GeminiClient.extractJobDetails(emailBody) ?: generateLocalExtractionFallback(sampleEmail)
+        injectExtractedJobIntoDatabase(sampleEmail, extraction)
+    }
+
+    private suspend fun injectExtractedJobIntoDatabase(email: DemoEmail, result: JobExtractionResult) {
+        withContext(Dispatchers.IO) {
+            val company = result.companyName ?: "Unknown Company"
+            val title = result.jobTitle ?: "Unknown Role"
+            val apps = repository.allApplications.first()
+            val matchedApp = apps.find {
+                it.companyName.equals(company, ignoreCase = true) &&
+                        it.jobTitle.equals(title, ignoreCase = true)
+            }
+
+            val targetAppId: Int
+            if (matchedApp != null) {
+                targetAppId = matchedApp.id
+                val updatedApp = matchedApp.copy(
+                    currentStatus = result.applicationStatus ?: matchedApp.currentStatus,
+                    notes = if (result.nextAction != null) {
+                        "${matchedApp.notes}\n\n[Auto Background Sync] Next action: ${result.nextAction}".trim()
+                    } else matchedApp.notes,
+                    updatedAt = System.currentTimeMillis()
+                )
+                repository.updateApplication(updatedApp)
+            } else {
+                val parsedDate = parseDateString(result.eventDate) ?: System.currentTimeMillis()
+                val newApp = JobApplication(
+                    companyName = company,
+                    jobTitle = title,
+                    currentStatus = result.applicationStatus ?: "Applied",
+                    source = "Live Gmail Event",
+                    appliedDate = parsedDate,
+                    notes = result.summary ?: "Extracted in real-time background sync.",
+                    nextAction = result.nextAction ?: "",
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis()
+                )
+                targetAppId = repository.insertApplication(newApp).toInt()
+            }
+
+            val parsedEventDate = parseDateString(result.eventDate) ?: System.currentTimeMillis()
+            val newEvent = JobEvent(
+                applicationId = targetAppId,
+                eventType = result.eventType,
+                eventDate = parsedEventDate,
+                summary = result.summary ?: "Live background email trigger.",
+                extractedByAi = true,
+                confidence = result.confidence,
+                rawSnippet = email.snippet,
+                createdAt = System.currentTimeMillis()
+            )
+            repository.insertEvent(newEvent)
+
+            val proceEmail = ProcessedEmail(
+                gmailMessageId = email.messageId,
+                threadId = email.threadId,
+                subject = email.subject,
+                sender = email.sender,
+                dateString = email.dateString,
+                snippet = email.snippet,
+                classification = result.eventType,
+                confidence = result.confidence,
+                linkedApplicationId = targetAppId
+            )
+            repository.insertProcessedEmail(proceEmail)
+
+            Log.d("BackgroundScanner", "Successfully auto-synced & injected email event for $company ($title)")
         }
     }
 

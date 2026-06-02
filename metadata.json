@@ -1,5 +1,5 @@
 {
-  "name": "JobTrack AI",
+  "name": "Jobs",
   "description": "An automated and manual job application tracker that scans Gmail and uses Gemini AI to extract application updates, manage your pipeline, and organize follow-ups.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

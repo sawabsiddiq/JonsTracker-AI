@@ -90,6 +90,50 @@ object GmailClient {
             .build()
             .create(GmailApi::class.java)
     }
+
+    fun extractHeader(headers: List<com.example.data.remote.GmailHeader>?, name: String): String {
+        return headers?.find { it.name.equals(name, ignoreCase = true) }?.value ?: ""
+    }
+
+    fun extractEmailBody(payload: com.example.data.remote.GmailPayload?): String {
+        if (payload == null) return ""
+        val bodyData = payload.body?.data
+        if (!bodyData.isNullOrEmpty()) {
+            return try {
+                val decoded = android.util.Base64.decode(bodyData, android.util.Base64.URL_SAFE)
+                String(decoded, Charsets.UTF_8)
+            } catch (e: java.lang.Exception) {
+                ""
+            }
+        }
+        payload.parts?.forEach { part ->
+            val text = extractEmailBody(part)
+            if (text.isNotEmpty()) {
+                return text
+            }
+        }
+        return ""
+    }
+
+    fun mapToDemoEmail(detail: com.example.data.remote.GmailMessageDetail): DemoEmail {
+        val headers = detail.payload?.headers
+        val sender = extractHeader(headers, "From")
+        val subject = extractHeader(headers, "Subject")
+        val dateString = extractHeader(headers, "Date")
+        var body = extractEmailBody(detail.payload)
+        if (body.isEmpty()) {
+            body = detail.snippet
+        }
+        return DemoEmail(
+            messageId = detail.id,
+            threadId = detail.threadId,
+            sender = sender.ifEmpty { "Unknown" },
+            subject = subject.ifEmpty { "No Subject" },
+            dateString = dateString.ifEmpty { "Unknown Date" },
+            body = body,
+            snippet = detail.snippet
+        )
+    }
 }
 
 // --- Demo Scenarios & Emulated Job Emails ---
