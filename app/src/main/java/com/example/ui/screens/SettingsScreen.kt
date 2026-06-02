@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,6 +42,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showSyncClearDialog by remember { mutableStateOf(false) }
+    var tapCount by remember { mutableStateOf(0) }
 
     Scaffold(
         topBar = {
@@ -56,7 +58,13 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                         Text(
                             text = "Settings Vault",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black, fontSize = 20.sp),
-                            color = SleekSecondary
+                            color = SleekSecondary,
+                            modifier = Modifier.clickable {
+                                tapCount++
+                                if (tapCount == 7) {
+                                    Toast.makeText(context, "Developer Sandbox Mode enabled!", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         )
                     }
                 },
@@ -89,6 +97,245 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                 .padding(horizontal = 24.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // --- APPEARANCE & THEME SELECTOR ---
+            Text(
+                text = "APPEARANCE & RE-THEMING",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                color = SleekPrimary
+            )
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, SleekBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "App Color Theme",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = SleekSecondary
+                    )
+                    
+                    val themeMode by viewModel.themeMode.collectAsState()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            com.example.data.local.AppThemeMode.SYSTEM to "System default",
+                            com.example.data.local.AppThemeMode.LIGHT to "Light",
+                            com.example.data.local.AppThemeMode.DARK to "Dark"
+                        ).forEach { (mode, label) ->
+                            val isSelected = themeMode == mode
+                            Button(
+                                onClick = { viewModel.setThemeMode(mode) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isSelected) SleekPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = if (isSelected) Color.White else SleekSecondary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("theme_button_${label.lowercase().replace(" ", "_")}")
+                            ) {
+                                Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- HISTORICAL GMAIL SCAN CONTROLS ---
+            Text(
+                text = "HISTORICAL SCAN CONTROLS (V1)",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                color = SleekPrimary
+            )
+
+            val scanDaysVal by viewModel.scanDays.collectAsState()
+            val maxMessagesVal by viewModel.maxMessagesToFetch.collectAsState()
+            val maxEmailsVal by viewModel.maxEmailsToAnalyze.collectAsState()
+            val includeSpamTrashVal by viewModel.includeSpamTrash.collectAsState()
+            val scanModeVal by viewModel.scanMode.collectAsState()
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, SleekBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    
+                    // 1. Date Range Section
+                    Column {
+                        Text(
+                            text = "Scan Date Range",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                            color = SleekSecondary
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(7, 15, 30, 60, 90).forEach { days ->
+                                val label = when (days) {
+                                    90 -> "Custom"
+                                    else -> "$days days"
+                                }
+                                val isSelected = scanDaysVal == days
+                                Button(
+                                    onClick = { viewModel.setScanDays(days) },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isSelected) SleekPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                                        contentColor = if (isSelected) Color.White else SleekSecondary
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    Divider(color = SleekBorder)
+
+                    // 2. Fetch Limits
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1.2f)) {
+                            Text(
+                                text = "Max fetch limit",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = SleekSecondary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf(50, 100, 200, 300).forEach { maxF ->
+                                    val isSelected = maxMessagesVal == maxF
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .background(
+                                                if (isSelected) SleekPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                                                RoundedCornerShape(6.dp)
+                                            )
+                                            .clickable { viewModel.setMaxMessagesToFetch(maxF) }
+                                            .padding(vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "$maxF",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isSelected) Color.White else SleekSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Max AI scans",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = SleekSecondary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf(25, 50, 100).forEach { maxA ->
+                                    val isSelected = maxEmailsVal == maxA
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .background(
+                                                if (isSelected) SleekPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                                                RoundedCornerShape(6.dp)
+                                            )
+                                            .clickable { viewModel.setMaxEmailsToAnalyze(maxA) }
+                                            .padding(vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "$maxA",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isSelected) Color.White else SleekSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Divider(color = SleekBorder)
+
+                    // 3. Include Spam/Trash Option
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                text = "Include Spam & Trash",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = SleekSecondary
+                            )
+                            Text(
+                                text = "Searches extra folders via in:anywhere query",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SleekSubtext
+                            )
+                        }
+                        Switch(
+                            checked = includeSpamTrashVal,
+                            onCheckedChange = { viewModel.setIncludeSpamTrash(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = SleekPrimary
+                            )
+                        )
+                    }
+
+                    Divider(color = SleekBorder)
+
+                    // 4. Scan Mode Options (Cost/Depth)
+                    Column {
+                        Text(
+                            text = "Pre-filtering scan mode",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                            color = SleekSecondary
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf("Low Cost", "Balanced", "Thorough").forEach { mode ->
+                                val isSelected = scanModeVal == mode
+                                Button(
+                                    onClick = { viewModel.setScanMode(mode) },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isSelected) SleekPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                                        contentColor = if (isSelected) Color.White else SleekSecondary
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(mode, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // --- SECTION 1: Gmail Connection Status ---
             Text(
                 text = "CONNECTION PREFERENCES",
@@ -118,12 +365,12 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Gmail Syncer Status",
+                                    text = "Gmail integration status",
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                     color = SleekSecondary
                                 )
                                 Text(
-                                    text = if (!token.isNullOrEmpty()) "Credentials Authorized" else "Disconnected",
+                                    text = if (!token.isNullOrEmpty()) "Gmail Connected & Authorized" else "Disconnected",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (!token.isNullOrEmpty()) SleekPrimary else SleekSubtext
                                 )
@@ -159,7 +406,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                         ) {
                             Column {
                                 Text(
-                                    text = "Automated Syncing Nodes",
+                                    text = "Automated email node syncer",
                                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                                     color = SleekSecondary
                                 )
@@ -206,7 +453,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                     ) {
                         Column {
                             Text(
-                                text = "Export Pipeline Logs",
+                                text = "Export local JSON",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                 color = SleekSecondary
                               )
@@ -222,7 +469,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                                 haptic?.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                                 viewModel.exportData { jsonString ->
                                     clipboard.setText(AnnotatedString(jsonString))
-                                    Toast.makeText(context, "Pipeline copied to Clipboard!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Pipeline data copied to Clipboard!", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             modifier = Modifier
@@ -243,12 +490,12 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                     ) {
                         Column {
                             Text(
-                                text = "Wipe Scrapes Logs",
+                                text = "Delete Gmail sync history",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                 color = SleekSecondary
                             )
                             Text(
-                                text = "Flush analyzed email hash tags",
+                                text = "Flush hash table of processed emails",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = SleekSubtext
                             )
@@ -262,7 +509,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                             modifier = Modifier.testTag("clear_sync_logs_button")
                         ) {
-                            Text("Wipe Sync", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                            Text("Flush history", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                         }
                     }
 
@@ -276,12 +523,12 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                     ) {
                         Column {
                             Text(
-                                text = "Factory Purge Database",
+                                text = "Delete all local data",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                 color = SleekSecondary
                             )
                             Text(
-                                text = "Erase all SQLite tracker tables",
+                                text = "Erase all offline SQLite tracking nodes",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = SleekSubtext
                             )
@@ -294,7 +541,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                             modifier = Modifier.testTag("wipe_database_button")
                         ) {
-                            Text("Wipe SQLite", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Delete all", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }
@@ -315,14 +562,15 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
-                        text = "🛡️ Client-First Absolute Isolation Policy",
+                        text = "🛡️ Privacy Policy placeholder",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                         color = SleekPrimary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "1. LOCAL ONLY PERSISTENCE: Your credentials, email metadata, matches, and pipeline steps are written and stored client-side in secure SQLite DB layers. We execute no telemetry.\n\n" +
-                                "2. GMAIL BOUNDS: The email ingestion module requests localized read-only scopes. No auto-forwarders or background relays are initialized.\n\n" +
+                        text = "Your data privacy is our absolute priority. This application implements the following strict boundaries:\n\n" +
+                                "1. LOCAL ONLY PERSISTENCE: Your credentials, email metadata, matches, and pipeline steps are written and stored client-side in secure offline SQLite DB layers. We execute no analytical tracking, telemetry, or remote collection.\n\n" +
+                                "2. PRIVACY PLACEHOLDER: Full Privacy Policy details are governed directly by local client regulations. At no point are raw email contents or body payloads saved remotely.\n\n" +
                                 "3. ZERO-RETENTION COGNITIVE PARSING: Live token extractions are formatted client-side and analyzed directly via encrypted REST API calls to the Google Gemini endpoint. At no point do we retain, pipeline, or feed inputs into third-party vector weights.",
                         style = MaterialTheme.typography.labelSmall,
                         color = SleekSubtext,
@@ -339,6 +587,44 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                 }
             }
 
+            // --- EASTER EGG DEVELOPER SANDBOX ---
+            if (tapCount >= 7) {
+                Text(
+                    text = "🛠️ DEVELOPER SANDBOX NODE",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                    color = SleekPrimary
+                )
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Active Token: ${token?.take(15)}...", fontSize = 11.sp, color = SleekSecondary)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Button(
+                                onClick = { viewModel.scanGmail(demoMode = true) },
+                                colors = ButtonDefaults.buttonColors(containerColor = SleekPrimary),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Trigger Demo Scan", fontSize = 11.sp)
+                            }
+                            Button(
+                                onClick = {
+                                    viewModel.clearGmailToken()
+                                    Toast.makeText(context, "Mock Token Flushed", Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Wipe Access Token", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(115.dp))
         }
     }
@@ -347,7 +633,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
     if (showSyncClearDialog) {
         AlertDialog(
             onDismissRequest = { showSyncClearDialog = false },
-            title = { Text("Wipe Ingestion Sync History?", fontWeight = FontWeight.Bold) },
+            title = { Text("Delete Gmail Sync History?", fontWeight = FontWeight.Bold) },
             text = { Text("This will clear the history of all processed emails in your local database. Future scans may reconsider previously parsed messages.") },
             confirmButton = {
                 Button(
@@ -373,14 +659,14 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
     if (showDeleteConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
-            title = { Text("Erase All Tracking Node Data?", fontWeight = FontWeight.Bold) },
+            title = { Text("Delete All Local Data?", fontWeight = FontWeight.Bold) },
             text = { Text("This is an irreversible factory execution! You will lose your entire career tracker history, event intervals, applications, and logs immediately.") },
             confirmButton = {
                 Button(
                     onClick = {
                         viewModel.deleteAllApplicationData()
                         showDeleteConfirmDialog = false
-                        Toast.makeText(context, "SQLite database purged", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "All data deleted successfully.", Toast.LENGTH_LONG).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {

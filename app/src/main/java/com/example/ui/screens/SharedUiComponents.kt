@@ -1606,3 +1606,135 @@ fun EditExtractionDialog(
         }
     )
 }
+
+@Composable
+fun IngestionProgressDialog(
+    show: Boolean,
+    scanDays: Int,
+    maxFetch: Int,
+    maxAnalyze: Int,
+    found: Int,
+    skipped: Int,
+    analyzed: Int,
+    detected: Int,
+    limitReached: Boolean,
+    syncError: String?,
+    onDismiss: () -> Unit = {}
+) {
+    if (!show) return
+
+    AlertDialog(
+        onDismissRequest = { /* user cannot dismiss manually */ },
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false
+        ),
+        confirmButton = {},
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = SleekPrimary,
+                    strokeWidth = 2.5.dp
+                )
+                Text(
+                    text = "Syncing ATS Nodes...",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 18.sp,
+                    color = SleekSecondary
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Pre-scan message with configured bounds
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SleekPrimary.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = "JobTrack AI will scan up to $maxFetch emails from the past $scanDays days. Only likely job-related emails will be analyzed by Gemini. Results will wait in AI Inbox for approval.",
+                        fontSize = 11.sp,
+                        color = SleekPrimary,
+                        lineHeight = 15.sp
+                    )
+                }
+
+                // Rolling Progress Stats
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("📩 Emails Found:", fontSize = 12.sp, color = SleekSecondary, fontWeight = FontWeight.Bold)
+                        Text("$found / $maxFetch", fontSize = 12.sp, color = SleekPrimary, fontWeight = FontWeight.ExtraBold)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("⏩ Emails Skipped:", fontSize = 12.sp, color = SleekSecondary)
+                        Text("$skipped", fontSize = 12.sp, color = SleekSubtext)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("🧠 AI Scans Executed:", fontSize = 12.sp, color = SleekSecondary, fontWeight = FontWeight.Bold)
+                        Text("$analyzed / $maxAnalyze", fontSize = 12.sp, color = SleekPrimary, fontWeight = FontWeight.ExtraBold)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("⚡ Career Transitions Found:", fontSize = 12.sp, color = SleekSecondary, fontWeight = FontWeight.Bold)
+                        Text("$detected", fontSize = 12.sp, color = StatusOffer, fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+
+                // Progress Indicator Bar
+                val fraction = if (maxAnalyze > 0) analyzed.toFloat() / maxAnalyze.toFloat() else 0f
+                LinearProgressIndicator(
+                    progress = { fraction.coerceIn(0f, 1f) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    color = SleekPrimary,
+                    trackColor = SleekBorder
+                )
+
+                if (limitReached || syncError != null) {
+                    Text(
+                        text = syncError ?: "Scan paused because selected limit was reached.",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Text(
+                        text = "Retrieving and parsing secure pipeline intervals...",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SleekSubtext,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        shape = RoundedCornerShape(20.dp),
+        containerColor = MaterialTheme.colorScheme.surface
+    )
+}

@@ -72,6 +72,60 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
 
     private val prefs = SecurePrefsManager.getSecurePrefs(application)
 
+    private val themePrefs = com.example.data.local.ThemePreferences(application)
+    val themeMode: StateFlow<com.example.data.local.AppThemeMode> = themePrefs.themeModeFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = com.example.data.local.AppThemeMode.SYSTEM
+        )
+
+    fun setThemeMode(mode: com.example.data.local.AppThemeMode) {
+        viewModelScope.launch {
+            themePrefs.setThemeMode(mode)
+        }
+    }
+
+    private val _scanDays = MutableStateFlow(prefs.getInt("scan_days", 15))
+    val scanDays: StateFlow<Int> = _scanDays.asStateFlow()
+
+    private val _maxMessagesToFetch = MutableStateFlow(prefs.getInt("max_messages_to_fetch", 100))
+    val maxMessagesToFetch: StateFlow<Int> = _maxMessagesToFetch.asStateFlow()
+
+    private val _maxEmailsToAnalyze = MutableStateFlow(prefs.getInt("max_emails_to_analyze", 50))
+    val maxEmailsToAnalyze: StateFlow<Int> = _maxEmailsToAnalyze.asStateFlow()
+
+    private val _includeSpamTrash = MutableStateFlow(prefs.getBoolean("include_spam_trash", false))
+    val includeSpamTrash: StateFlow<Boolean> = _includeSpamTrash.asStateFlow()
+
+    private val _scanMode = MutableStateFlow(prefs.getString("scan_mode", "Balanced") ?: "Balanced")
+    val scanMode: StateFlow<String> = _scanMode.asStateFlow()
+
+    fun setScanDays(days: Int) {
+        prefs.edit().putInt("scan_days", days).apply()
+        _scanDays.value = days
+    }
+
+    fun setMaxMessagesToFetch(max: Int) {
+        prefs.edit().putInt("max_messages_to_fetch", max).apply()
+        _maxMessagesToFetch.value = max
+    }
+
+    fun setMaxEmailsToAnalyze(max: Int) {
+        prefs.edit().putInt("max_emails_to_analyze", max).apply()
+        _maxEmailsToAnalyze.value = max
+    }
+
+    fun setIncludeSpamTrash(include: Boolean) {
+        prefs.edit().putBoolean("include_spam_trash", include).apply()
+        _includeSpamTrash.value = include
+    }
+
+    fun setScanMode(mode: String) {
+        prefs.edit().putString("scan_mode", mode).apply()
+        _scanMode.value = mode
+    }
+
     private val _gmailAccessToken = MutableStateFlow(prefs.getString("gmail_token", null))
     val gmailAccessToken: StateFlow<String?> = _gmailAccessToken.asStateFlow()
 
@@ -369,6 +423,77 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
         _lastGmailScan.value = now
     }
 
+    // --- Progress tracking states for live and demo scans ---
+    private val _scanProgressFound = MutableStateFlow(0)
+    val scanProgressFound: StateFlow<Int> = _scanProgressFound.asStateFlow()
+
+    private val _scanProgressSkipped = MutableStateFlow(0)
+    val scanProgressSkipped: StateFlow<Int> = _scanProgressSkipped.asStateFlow()
+
+    private val _scanProgressAnalyzed = MutableStateFlow(0)
+    val scanProgressAnalyzed: StateFlow<Int> = _scanProgressAnalyzed.asStateFlow()
+
+    private val _scanProgressDetected = MutableStateFlow(0)
+    val scanProgressDetected: StateFlow<Int> = _scanProgressDetected.asStateFlow()
+
+    private val _scanLimitReached = MutableStateFlow(false)
+    val scanLimitReached: StateFlow<Boolean> = _scanLimitReached.asStateFlow()
+
+    private fun shouldAnalyzeLocalFilter(subject: String, snippet: String, body: String, mode: String): Boolean {
+        val subLower = subject.lowercase()
+        val snipLower = snippet.lowercase()
+        val bodyLower = body.lowercase()
+
+        // Block obvious spam or billing alerts commonly matching keywords
+        if (subLower.contains("receipt") || subLower.contains("invoice") || subLower.contains("billing") ||
+            subLower.contains("transaction") || subLower.contains("subscription") || subLower.contains("payment") ||
+            subLower.contains("your order") || subLower.contains("shipped") || subLower.contains("delivery") ||
+            subLower.contains("coupon") || subLower.contains("deal of the day") || subLower.contains("newsletter") ||
+            subLower.contains("unlimited plans") || subLower.contains("security alert") || subLower.contains("verify your account")
+        ) {
+            return false
+        }
+
+        return when (mode.trim().lowercase()) {
+            "low cost" -> {
+                subLower.contains("apply") || subLower.contains("application") ||
+                        subLower.contains("status") || subLower.contains("interview") ||
+                        subLower.contains("offer") || subLower.contains("careers") ||
+                        subLower.contains("hiring") || subLower.contains("assessment") ||
+                        subLower.contains("congratulations") || subLower.contains("next steps") ||
+                        snipLower.contains("schedule your interview") || snipLower.contains("coding challenge")
+            }
+            "balanced" -> {
+                subLower.contains("apply") || subLower.contains("application") ||
+                        subLower.contains("status") || subLower.contains("interview") ||
+                        subLower.contains("offer") || subLower.contains("careers") ||
+                        subLower.contains("hiring") || subLower.contains("assessment") ||
+                        subLower.contains("congratulations") || subLower.contains("next steps") ||
+                        subLower.contains("job") || subLower.contains("resume") ||
+                        subLower.contains("candidate") || subLower.contains("recruiting") ||
+                        snipLower.contains("apply") || snipLower.contains("application") ||
+                        snipLower.contains("interview") || snipLower.contains("offer") ||
+                        snipLower.contains("hiring") || snipLower.contains("job") ||
+                        bodyLower.contains("thank you for applying") || bodyLower.contains("coding challenge")
+            }
+            else -> {
+                // Thorough: let everything through
+                true
+            }
+        }
+    }
+
+    private fun createNeedsManualReviewResult(email: DemoEmail, reason: String = "AI Parse Failed"): JobExtractionResult {
+        val fallback = generateLocalExtractionFallback(email)
+        return fallback.copy(
+            confidence = 0.5f,
+            summary = "Needs manual review ($reason). Original subject: ${email.subject}",
+            nextAction = "Verify and correct any missing company, role, or status details manually.",
+            eventType = "follow_up_needed",
+            applicationStatus = "Recruiter replied"
+        )
+    }
+
     // --- Gmail Syncer logic (Option A) ---
 
     fun scanGmail(demoMode: Boolean = true, customApiKey: String? = null) {
@@ -378,19 +503,36 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
             _syncErrorType.value = SyncErrorType.None
             _gmailSyncResults.value = emptyList()
 
+            // Reset progress counters
+            _scanProgressFound.value = 0
+            _scanProgressSkipped.value = 0
+            _scanProgressAnalyzed.value = 0
+            _scanProgressDetected.value = 0
+            _scanLimitReached.value = false
+
             var success = true
             try {
                 // If there's an active token stored, we can perform a real live scan
                 val token = _gmailAccessToken.value
                 val isRealLive = !demoMode && !token.isNullOrEmpty()
 
+                var totalCharactersSent = 0
+                val maxCharsPerScan = 100000 // cost budget cap limit
+
                 if (isRealLive && token != null) {
                     val bearer = "Bearer $token"
-                    val query = "newer_than:15d"
+                    val days = _scanDays.value
+                    var query = "newer_than:${days}d (apply OR application OR interview OR offer OR career OR hiring OR assessment OR resume OR job)"
+                    if (_includeSpamTrash.value) {
+                        query += " in:anywhere"
+                    }
+
+                    val maxMsgToFetch = _maxMessagesToFetch.value
+                    val maxToAnalyze = _maxEmailsToAnalyze.value
 
                     val listResponse = try {
                         withContext(Dispatchers.IO) {
-                            GmailClient.service.listMessages(bearerToken = bearer, query = query, maxResults = 25)
+                            GmailClient.service.listMessages(bearerToken = bearer, query = query, maxResults = maxMsgToFetch)
                         }
                     } catch (e: java.io.IOException) {
                         _syncErrorType.value = SyncErrorType.NoInternet
@@ -410,19 +552,23 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                     }
 
                     val messages = listResponse.messages ?: emptyList()
+                    _scanProgressFound.value = messages.size
+
                     if (messages.isEmpty()) {
                         withContext(Dispatchers.Main) {
                             _syncErrorType.value = SyncErrorType.EmptyInbox
-                            _syncError.value = "Your inbox is clean and fully synced. No emails found matching 'newer_than:15d'!"
+                            _syncError.value = "Your inbox is clean and fully synced. No emails found matching the search criteria!"
                         }
                         return@launch
                     }
 
                     val unprocessed = messages.filter { !repository.isEmailProcessed(it.id) }
+                    _scanProgressSkipped.value = messages.size - unprocessed.size
+
                     if (unprocessed.isEmpty()) {
                         withContext(Dispatchers.Main) {
                             _syncErrorType.value = SyncErrorType.DuplicateJobUpdate
-                            _syncError.value = "Duplicate update: All emails in the last 15 days are already analyzed and active in your pipeline."
+                            _syncError.value = "Duplicate update: All fetched emails in the specified range are already processed and active in your pipeline."
                         }
                         return@launch
                     }
@@ -431,16 +577,57 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
 
                     withContext(Dispatchers.IO) {
                         for (ref in unprocessed) {
+                            // Check scan budget caps
+                            if (_scanProgressAnalyzed.value >= maxToAnalyze) {
+                                _scanLimitReached.value = true
+                                _syncError.value = "Scan paused because your selected scan limit was reached."
+                                break
+                            }
+                            if (totalCharactersSent >= maxCharsPerScan) {
+                                _scanLimitReached.value = true
+                                _syncError.value = "Scan paused because your selected scan limit was reached."
+                                break
+                            }
+
                             try {
                                 val detail = GmailClient.service.getMessage(bearer, ref.id)
                                 val email = GmailClient.mapToDemoEmail(detail)
 
-                                val extractionResult = GeminiClient.extractJobDetails(email.body)
+                                // Apply local filter
+                                val passesFilter = shouldAnalyzeLocalFilter(email.subject, email.snippet, email.body, _scanMode.value)
+                                if (!passesFilter) {
+                                    val logEmail = ProcessedEmail(
+                                        gmailMessageId = email.messageId,
+                                        threadId = email.threadId,
+                                        subject = email.subject,
+                                        sender = email.sender,
+                                        dateString = email.dateString,
+                                        snippet = email.snippet,
+                                        classification = "irrelevant",
+                                        confidence = 1.0f,
+                                        linkedApplicationId = null
+                                    )
+                                    repository.insertProcessedEmail(logEmail)
+                                    _scanProgressSkipped.value += 1
+                                    continue
+                                }
+
+                                // Trim email body to prevent excess token usage
+                                val trimmedBody = if (email.body.length > 4000) email.body.substring(0, 4000) else email.body
+                                totalCharactersSent += trimmedBody.length
+                                _scanProgressAnalyzed.value += 1
+
+                                val extractionResult = try {
+                                    GeminiClient.extractJobDetails(trimmedBody)
+                                } catch (e: Exception) {
+                                    null
+                                }
+
                                 if (extractionResult != null) {
                                     if (extractionResult.isJobRelated) {
                                         pendingResults.add(email to extractionResult)
+                                        _scanProgressDetected.value += 1
                                     } else {
-                                        // Ignore completely irrelevant emails
                                         val logEmail = ProcessedEmail(
                                             gmailMessageId = email.messageId,
                                             threadId = email.threadId,
@@ -453,28 +640,13 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                                             linkedApplicationId = null
                                         )
                                         repository.insertProcessedEmail(logEmail)
+                                        _scanProgressSkipped.value += 1
                                     }
                                 } else {
-                                    // Fallback prediction if off-line / key missing
-                                    _syncErrorType.value = SyncErrorType.GeminiFailure
-                                    CrashlyticsHelper.log("Gemini parsed null result. Directing to heuristic backup.")
-                                    val fallbackResult = generateLocalExtractionFallback(email)
-                                    if (fallbackResult.isJobRelated) {
-                                        pendingResults.add(email to fallbackResult)
-                                    } else {
-                                        val logEmail = ProcessedEmail(
-                                            gmailMessageId = email.messageId,
-                                            threadId = email.threadId,
-                                            subject = email.subject,
-                                            sender = email.sender,
-                                            dateString = email.dateString,
-                                            snippet = email.snippet,
-                                            classification = "irrelevant",
-                                            confidence = 1.0f,
-                                            linkedApplicationId = null
-                                        )
-                                        repository.insertProcessedEmail(logEmail)
-                                    }
+                                    // Gemini failed or returned malformed content -> create deep client-friendly Needs Manual Reviewfallback
+                                    val fallbackResult = createNeedsManualReviewResult(email, "Raw parsing failed")
+                                    pendingResults.add(email to fallbackResult)
+                                    _scanProgressDetected.value += 1
                                 }
                             } catch (e: Exception) {
                                 Log.e(TAG, "Failed to parse individual live email ${ref.id}", e)
@@ -483,9 +655,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                         }
                     }
 
-                    if (pendingResults.isEmpty()) {
-                        _syncError.value = "No job-related updates detected in the latest unparsed emails."
-                    } else {
+                    if (pendingResults.isNotEmpty()) {
                         // Persist these to SQLite so that AI Inbox reviews are non-volatile
                         withContext(Dispatchers.IO) {
                             pendingResults.forEach { (email, result) ->
@@ -519,9 +689,11 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                     }
 
                 } else {
+                    // DEMO AND SIMULATED ENGINE FOR EXECUTING HIGH QUALITY REVIEWS IN SANDBOX
                     val unprocessed = GmailDemoData.presetEmails.filter { email ->
                         !repository.isEmailProcessed(email.messageId)
                     }
+                    _scanProgressFound.value = GmailDemoData.presetEmails.size
 
                     if (unprocessed.isEmpty()) {
                         withContext(Dispatchers.Main) {
@@ -531,17 +703,59 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                         return@launch
                     }
 
+                    val maxToAnalyze = _maxEmailsToAnalyze.value
+                    _scanProgressSkipped.value = GmailDemoData.presetEmails.size - unprocessed.size
+
                     val pendingResults = mutableListOf<Pair<DemoEmail, JobExtractionResult>>()
 
                     withContext(Dispatchers.IO) {
                         for (email in unprocessed) {
-                            // Extract details from message content using the actual Gemini REST API!
-                            val extractionResult = GeminiClient.extractJobDetails(email.body)
+                            // Check scan budget caps
+                            if (_scanProgressAnalyzed.value >= maxToAnalyze) {
+                                _scanLimitReached.value = true
+                                _syncError.value = "Scan paused because your selected scan limit was reached."
+                                break
+                            }
+                            if (totalCharactersSent >= maxCharsPerScan) {
+                                _scanLimitReached.value = true
+                                _syncError.value = "Scan paused because your selected scan limit was reached."
+                                break
+                            }
+
+                            // Apply local filters dynamically in simulation to make it authentic!
+                            val passesFilter = shouldAnalyzeLocalFilter(email.subject, email.snippet, email.body, _scanMode.value)
+                            if (!passesFilter) {
+                                val logEmail = ProcessedEmail(
+                                    gmailMessageId = email.messageId,
+                                    threadId = email.threadId,
+                                    subject = email.subject,
+                                    sender = email.sender,
+                                    dateString = email.dateString,
+                                    snippet = email.snippet,
+                                    classification = "irrelevant",
+                                    confidence = 1.0f,
+                                    linkedApplicationId = null
+                                )
+                                repository.insertProcessedEmail(logEmail)
+                                _scanProgressSkipped.value += 1
+                                continue
+                            }
+
+                            val trimmedBody = if (email.body.length > 4000) email.body.substring(0, 4000) else email.body
+                            totalCharactersSent += trimmedBody.length
+                            _scanProgressAnalyzed.value += 1
+
+                            val extractionResult = try {
+                                GeminiClient.extractJobDetails(trimmedBody)
+                            } catch (e: Exception) {
+                                null
+                            }
+
                             if (extractionResult != null) {
                                 if (extractionResult.isJobRelated) {
                                     pendingResults.add(email to extractionResult)
+                                    _scanProgressDetected.value += 1
                                 } else {
-                                    // auto-ignore completely irrelevant scan results (like Amazon Receipt)
                                     val logEmail = ProcessedEmail(
                                         gmailMessageId = email.messageId,
                                         threadId = email.threadId,
@@ -554,33 +768,18 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                                         linkedApplicationId = null
                                     )
                                     repository.insertProcessedEmail(logEmail)
+                                    _scanProgressSkipped.value += 1
                                 }
                             } else {
                                 // Fallback prediction in case API Key is missing or invalid so the applet is beautiful and robust
-                                val mockResult = generateLocalExtractionFallback(email)
-                                if (mockResult.isJobRelated) {
-                                    pendingResults.add(email to mockResult)
-                                } else {
-                                    val logEmail = ProcessedEmail(
-                                        gmailMessageId = email.messageId,
-                                        threadId = email.threadId,
-                                        subject = email.subject,
-                                        sender = email.sender,
-                                        dateString = email.dateString,
-                                        snippet = email.snippet,
-                                        classification = "irrelevant",
-                                        confidence = 1.0f,
-                                        linkedApplicationId = null
-                                    )
-                                    repository.insertProcessedEmail(logEmail)
-                                }
+                                val fallbackResult = createNeedsManualReviewResult(email, "Mock API parse bypass")
+                                pendingResults.add(email to fallbackResult)
+                                _scanProgressDetected.value += 1
                             }
                         }
                     }
 
-                    if (pendingResults.isEmpty()) {
-                        _syncError.value = "No job-related updates detected in the latest unparsed emails."
-                    } else {
+                    if (pendingResults.isNotEmpty()) {
                         // Persist these to SQLite so that AI Inbox reviews are non-volatile
                         withContext(Dispatchers.IO) {
                             pendingResults.forEach { (email, result) ->

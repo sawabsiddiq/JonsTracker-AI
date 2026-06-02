@@ -39,6 +39,17 @@ fun AiInboxScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier)
     val syncing by viewModel.syncingState.collectAsState()
     val lastGmailScan by viewModel.lastGmailScan.collectAsState()
 
+    val scanDays by viewModel.scanDays.collectAsState()
+    val maxMessagesToFetch by viewModel.maxMessagesToFetch.collectAsState()
+    val maxEmailsToAnalyze by viewModel.maxEmailsToAnalyze.collectAsState()
+
+    val found by viewModel.scanProgressFound.collectAsState()
+    val skipped by viewModel.scanProgressSkipped.collectAsState()
+    val analyzed by viewModel.scanProgressAnalyzed.collectAsState()
+    val detected by viewModel.scanProgressDetected.collectAsState()
+    val limitReached by viewModel.scanLimitReached.collectAsState()
+    val syncError by viewModel.syncError.collectAsState()
+
     var editingItem by remember { mutableStateOf<Pair<DemoEmail, JobExtractionResult>?>(null) }
     var showSetupInstructions by remember { mutableStateOf(false) }
 
@@ -271,5 +282,18 @@ fun AiInboxScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier)
                 }
             )
         }
+
+        IngestionProgressDialog(
+            show = syncing,
+            scanDays = scanDays,
+            maxFetch = maxMessagesToFetch,
+            maxAnalyze = maxEmailsToAnalyze,
+            found = found,
+            skipped = skipped,
+            analyzed = analyzed,
+            detected = detected,
+            limitReached = limitReached,
+            syncError = syncError
+        )
     }
 }

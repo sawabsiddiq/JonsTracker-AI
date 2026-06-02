@@ -45,7 +45,14 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            MyApplicationTheme {
+            val themeMode by viewModel.themeMode.collectAsState()
+            val useDarkTheme = when (themeMode) {
+                com.example.data.local.AppThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+                com.example.data.local.AppThemeMode.LIGHT -> false
+                com.example.data.local.AppThemeMode.DARK -> true
+            }
+
+            MyApplicationTheme(darkTheme = useDarkTheme) {
                 val currentScreen by viewModel.currentScreen.collectAsState()
 
                 // Intercept back gestures globally to avoid exiting the app unexpectedly
