@@ -500,7 +500,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                                 color = SleekSecondary
                             )
                             Text(
-                                text = "Flush hash table of processed emails",
+                                text = "Clear processed email history",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = SleekSubtext
                             )
@@ -514,7 +514,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                             modifier = Modifier.testTag("clear_sync_logs_button")
                         ) {
-                            Text("Flush history", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                            Text("Clear history", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                         }
                     }
 
@@ -533,7 +533,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                                 color = SleekSecondary
                             )
                             Text(
-                                text = "Erase all offline SQLite tracking nodes",
+                                text = "Delete all applications, events, and sync history stored on this device",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = SleekSubtext
                             )
@@ -627,7 +627,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
             title = { Text("Delete All Local Data?", fontWeight = FontWeight.Bold) },
-            text = { Text("This is an irreversible factory execution! You will lose your entire career tracker history, event intervals, applications, and logs immediately.") },
+            text = { Text("This cannot be undone. You will lose your entire applications tracker history, events, and processed email list immediately.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -637,7 +637,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("FACTORY WIPE ALL", color = Color.White)
+                    Text("Delete all data", color = Color.White)
                 }
             },
             dismissButton = {

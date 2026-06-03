@@ -707,7 +707,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
             } catch (e: Exception) {
                 success = false
                 Log.e(TAG, "Sync process failed", e)
-                _syncError.value = "Scraper error: ${e.message}"
+                _syncError.value = "Sync process failed: ${e.message}"
             } finally {
                 if (success) {
                     updateLastGmailScanTimestamp()
