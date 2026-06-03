@@ -1,7 +1,7 @@
 package com.example.data.remote
 
 import android.util.Log
-import com.example.BuildConfig
+import com.jobtrackai.app.BuildConfig
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.MediaType.Companion.toMediaType

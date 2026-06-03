@@ -11,7 +11,7 @@ import com.example.data.local.SecurePrefsManager
 import com.example.data.remote.GeminiClient
 import com.example.data.remote.GmailClient
 import com.example.data.remote.JobExtractionResult
-import com.example.data.remote.DemoEmail
+import com.example.data.remote.ParsedEmail
 import com.example.data.repository.JobRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -86,7 +86,7 @@ class GmailSyncWorker(
 
                 try {
                     val detail = GmailClient.service.getMessage(bearer, ref.id)
-                    val email = GmailClient.mapToDemoEmail(detail)
+                    val email = GmailClient.mapToParsedEmail(detail)
 
                     // Run the exact same filtering checks
                     val passesFilter = shouldAnalyzeLocalFilter(email.subject, email.snippet, email.body, scanMode)
@@ -218,17 +218,18 @@ class GmailSyncWorker(
         }
     }
 
-    private fun createNeedsManualReviewResult(email: DemoEmail, reason: String = "AI Parse Failed"): JobExtractionResult {
+    private fun createNeedsManualReviewResult(email: ParsedEmail, reason: String = "AI Parse Failed"): JobExtractionResult {
         return JobExtractionResult(
             isJobRelated = true,
             confidence = 0.5f,
             eventType = "follow_up_needed",
-            companyName = "Needs Verification",
-            jobTitle = "Verify Role",
+            companyName = null,
+            jobTitle = null,
             applicationStatus = "Applied",
             summary = "Needs manual review ($reason). Original subject: ${email.subject}",
             nextAction = "Verify and correct any missing company, role, or status details manually.",
-            source = "Gmail"
+            source = "Gmail",
+            eventDate = null
         )
     }
 }

@@ -115,7 +115,7 @@ object GmailClient {
         return ""
     }
 
-    fun mapToDemoEmail(detail: com.example.data.remote.GmailMessageDetail): DemoEmail {
+    fun mapToParsedEmail(detail: com.example.data.remote.GmailMessageDetail): ParsedEmail {
         val headers = detail.payload?.headers
         val sender = extractHeader(headers, "From")
         val subject = extractHeader(headers, "Subject")
@@ -124,7 +124,7 @@ object GmailClient {
         if (body.isEmpty()) {
             body = detail.snippet
         }
-        return DemoEmail(
+        return ParsedEmail(
             messageId = detail.id,
             threadId = detail.threadId,
             sender = sender.ifEmpty { "Unknown" },
@@ -136,9 +136,9 @@ object GmailClient {
     }
 }
 
-// --- Demo Scenarios & Emulated Job Emails ---
+// --- Parsed Account Emails ---
 
-data class DemoEmail(
+data class ParsedEmail(
     val messageId: String,
     val threadId: String,
     val sender: String,

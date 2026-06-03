@@ -13,7 +13,7 @@ import com.example.data.local.ProcessedEmail
 import com.example.data.local.PendingAiExtraction
 import com.example.data.local.SecurePrefsManager
 import com.example.data.repository.JobRepository
-import com.example.data.remote.DemoEmail
+import com.example.data.remote.ParsedEmail
 import com.example.data.remote.GeminiClient
 import com.example.data.remote.GmailClient
 import com.example.data.remote.JobExtractionResult
@@ -140,8 +140,8 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
 
     // --- Gmail Scan / AI Review state ---
-    private val _gmailSyncResults = MutableStateFlow<List<Pair<DemoEmail, JobExtractionResult>>>(emptyList())
-    val gmailSyncResults: StateFlow<List<Pair<DemoEmail, JobExtractionResult>>> = _gmailSyncResults.asStateFlow()
+    private val _gmailSyncResults = MutableStateFlow<List<Pair<ParsedEmail, JobExtractionResult>>>(emptyList())
+    val gmailSyncResults: StateFlow<List<Pair<ParsedEmail, JobExtractionResult>>> = _gmailSyncResults.asStateFlow()
 
     private val _syncingState = MutableStateFlow(false)
     val syncingState: StateFlow<Boolean> = _syncingState.asStateFlow()
@@ -169,7 +169,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             repository.allPendingExtractions.collect { list ->
                 val pairs = list.map { pending ->
-                    val email = DemoEmail(
+                    val email = ParsedEmail(
                         messageId = pending.messageId,
                         threadId = pending.threadId,
                         sender = pending.sender,
@@ -484,14 +484,18 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private fun createNeedsManualReviewResult(email: DemoEmail, reason: String = "AI Parse Failed"): JobExtractionResult {
-        val fallback = generateLocalExtractionFallback(email)
-        return fallback.copy(
+    private fun createNeedsManualReviewResult(email: ParsedEmail, reason: String = "AI Parse Failed"): JobExtractionResult {
+        return JobExtractionResult(
+            isJobRelated = true,
             confidence = 0.5f,
+            eventType = "follow_up_needed",
+            companyName = null,
+            jobTitle = null,
+            applicationStatus = "Applied",
             summary = "Needs manual review ($reason). Original subject: ${email.subject}",
             nextAction = "Verify and correct any missing company, role, or status details manually.",
-            eventType = "follow_up_needed",
-            applicationStatus = "Recruiter replied"
+            source = "Gmail",
+            eventDate = null
         )
     }
 
@@ -573,7 +577,9 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                         return@launch
                     }
 
-                    val unprocessed = messages.filter { !repository.isEmailProcessed(it.id) }
+                    val unprocessed = messages.filter { 
+                        !repository.isEmailProcessed(it.id) && !repository.isPendingAiExtraction(it.id) 
+                    }
                     _scanProgressSkipped.value = messages.size - unprocessed.size
 
                     if (unprocessed.isEmpty()) {
@@ -584,7 +590,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                         return@launch
                     }
 
-                    val pendingResults = mutableListOf<Pair<DemoEmail, JobExtractionResult>>()
+                    val pendingResults = mutableListOf<Pair<ParsedEmail, JobExtractionResult>>()
 
                     withContext(Dispatchers.IO) {
                         for (ref in unprocessed) {
@@ -602,7 +608,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
 
                             try {
                                 val detail = GmailClient.service.getMessage(bearer, ref.id)
-                                val email = GmailClient.mapToDemoEmail(detail)
+                                val email = GmailClient.mapToParsedEmail(detail)
 
                                 // Apply local filter
                                 val passesFilter = shouldAnalyzeLocalFilter(email.subject, email.snippet, email.body, _scanMode.value)
@@ -722,7 +728,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                 onComplete(parsedResult)
             } else {
                 // local fallback if offline
-                onComplete(generateLocalFallbackForText(emailBody))
+                onComplete(createNeedsManualReviewResultFromText(emailBody))
             }
             _syncingState.value = false
         }
@@ -730,7 +736,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
 
     // Review Actions
 
-    fun confirmSyncResult(email: DemoEmail, result: JobExtractionResult) {
+    fun confirmSyncResult(email: ParsedEmail, result: JobExtractionResult) {
         viewModelScope.launch(Dispatchers.IO) {
             val company = result.companyName ?: "Unknown Company"
             val title = result.jobTitle ?: "Unknown Role"
@@ -810,7 +816,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun ignoreSyncResult(email: DemoEmail) {
+    fun ignoreSyncResult(email: ParsedEmail) {
         viewModelScope.launch(Dispatchers.IO) {
             val proceEmail = ProcessedEmail(
                 gmailMessageId = email.messageId,
@@ -835,77 +841,21 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    // --- Helper Fallbacks (To guarantee robust execution if API Keys are not present) ---
+    // --- Clean low-confidence manual review fallbacks ---
 
-    private fun generateLocalExtractionFallback(email: DemoEmail): JobExtractionResult {
-        val lowerSub = email.subject.lowercase()
-        val lowerBody = email.body.lowercase()
-
-        val isJob = when {
-            lowerSub.contains("apply") || lowerSub.contains("recruiting") || lowerSub.contains("interview") || 
-            lowerSub.contains("offer") || lowerSub.contains("careers") || lowerSub.contains("application") ||
-            lowerBody.contains("hiring") -> true
-            else -> false
-        }
-
-        if (!isJob) {
-            return JobExtractionResult(isJobRelated = false, confidence = 0.95f, eventType = "irrelevant")
-        }
-
-        val company = when {
-            lowerSub.contains("google") || lowerBody.contains("google") -> "Google"
-            lowerSub.contains("stripe") || lowerBody.contains("stripe") -> "Stripe"
-            lowerSub.contains("meta") || lowerBody.contains("meta") -> "Meta"
-            lowerSub.contains("apple") || lowerBody.contains("apple") -> "Apple"
-            lowerSub.contains("netflix") || lowerBody.contains("netflix") -> "Netflix"
-            else -> "Hiring Startup"
-        }
-
-        val role = when {
-            lowerBody.contains("pm") || lowerSub.contains("product manager") -> "Product Manager"
-            lowerBody.contains("ux") || lowerSub.contains("ux architect") -> "UX Architect"
-            lowerBody.contains("mobile") || lowerBody.contains("android") -> "Software Engineer (Mobile)"
-            else -> "Software Engineer"
-        }
-
-        val (type, status, summary, action) = when {
-            lowerSub.contains("interview") || lowerBody.contains("interview") -> 
-                listOf("interview_invitation", "Interview", "Invited to technical screening video call panel.", "Join the scheduled meeting panel on time.")
-            lowerBody.contains("assessment") || lowerSub.contains("assessment") -> 
-                listOf("assessment_invitation", "Assessment", "Online technical assessment received.", "Complete algorithmic challenge.")
-            lowerSub.contains("offer") || lowerBody.contains("offer") -> 
-                listOf("offer", "Offer", "Received job employment offer details!", "Read over contract conditions.")
-            lowerSub.contains("unfortunately") || lowerBody.contains("unfortunately") || lowerSub.contains("careful consideration") -> 
-                listOf("rejection", "Rejected", "Application decision update: not proceeding.", "Keep updating profile and apply to other open paths.")
-            else -> 
-                listOf("application_confirmation", "Applied", "We have received your resume materials.", "Audit the active pipeline dashboard logs.")
-        }
-
+    private fun createNeedsManualReviewResultFromText(body: String): JobExtractionResult {
         return JobExtractionResult(
             isJobRelated = true,
-            confidence = 0.90f,
-            eventType = type,
-            companyName = company,
-            jobTitle = role,
-            applicationStatus = status,
-            summary = summary,
-            nextAction = action,
-            source = "Gmail",
-            eventDate = "2026-06-10"
+            confidence = 0.5f,
+            eventType = "follow_up_needed",
+            companyName = null,
+            jobTitle = null,
+            applicationStatus = "Applied",
+            summary = "Pasted content needs manual review.",
+            nextAction = "Verify and correct any missing company, role, or status details manually.",
+            source = "Pasted",
+            eventDate = null
         )
-    }
-
-    private fun generateLocalFallbackForText(body: String): JobExtractionResult {
-        val email = DemoEmail(
-            messageId = "pasted_" + System.currentTimeMillis(),
-            threadId = "thread_" + System.currentTimeMillis(),
-            sender = "Pasted",
-            subject = "Pasted Job Email Analysis",
-            dateString = "Now",
-            body = body,
-            snippet = body.take(80)
-        )
-        return generateLocalExtractionFallback(email)
     }
 
     private fun mapEventTypeToStatus(type: String): String? {

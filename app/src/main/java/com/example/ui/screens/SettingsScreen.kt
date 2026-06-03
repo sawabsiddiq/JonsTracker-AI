@@ -573,17 +573,17 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Your data privacy is our absolute priority. This application implements the following strict boundaries:\n\n" +
-                                "1. LOCAL ONLY PERSISTENCE: Your credentials, email metadata, matches, and application pipeline steps are written and stored client-side in secure offline SQLite database levels. We execute no analytical tracking, telemetry, or remote user profiling.\n\n" +
-                                "2. SECURE EMAIL EXTRACTION via GEMINI: To analyze and extract relevant job applications, selected email body excerpts are sent securely and directly to the Google Gemini API. These raw email contents are NOT stored on any second-party servers and are processed with zero-retention.\n\n" +
-                                "3. YOUR CONTROL: No email analytics or extractions affect your active job pipeline tables without your direct review and approval in the AI Inbox.",
+                        text = "The JobTrack AI application processes your data following strict local privacy practices:\n\n" +
+                                "1. LOCAL STORAGE: Your credentials, email metadata, and application updates are stored locally on your device's offline database so they remain under your control.\n\n" +
+                                "2. EMAIL ANALYSIS via GEMINI API: When analyzing your inbox or pasted messages, selected email excerpts are sent to the Google Gemini API to extract details. This transmission occurs only during active scans and analyses.\n\n" +
+                                "3. COMPLETE DELETION CONTROL: You have full authority over your data. You can erase your entire database, clean your Gmail sync processed history logs, or disconnect your Google account details at any time directly through this settings screen.",
                         style = MaterialTheme.typography.labelSmall,
                         color = SleekSubtext,
                         lineHeight = 16.sp
                     )
                     Spacer(modifier = Modifier.height(20.dp))
                     Text(
-                        text = "Your data and privacy are fully protected under secure locally-encrypted SQLite database rules.",
+                        text = "All data and settings operate locally on your device with direct options for database clears.",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = SleekPrimary,
                         textAlign = TextAlign.Center,

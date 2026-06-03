@@ -26,7 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.border
-import com.example.data.remote.DemoEmail
+import com.example.data.remote.ParsedEmail
 import com.example.data.remote.JobExtractionResult
 import com.example.ui.JobTrackerViewModel
 import com.example.ui.Screen
@@ -52,7 +52,7 @@ fun AiInboxScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier)
     val syncError by viewModel.syncError.collectAsState()
     val secureStorageAvailable by viewModel.secureStorageAvailable.collectAsState()
 
-    var editingItem by remember { mutableStateOf<Pair<DemoEmail, JobExtractionResult>?>(null) }
+    var editingItem by remember { mutableStateOf<Pair<ParsedEmail, JobExtractionResult>?>(null) }
     var showSetupInstructions by remember { mutableStateOf(false) }
 
     Scaffold(

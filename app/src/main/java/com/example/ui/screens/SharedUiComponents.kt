@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.JobApplication
 import com.example.data.local.JobEvent
-import com.example.data.remote.DemoEmail
+import com.example.data.remote.ParsedEmail
 import com.example.data.remote.JobExtractionResult
 import com.example.ui.Screen
 import com.example.ui.theme.*
@@ -794,7 +794,7 @@ fun ExtractionDataPoint(label: String, value: String, modifier: Modifier = Modif
 
 @Composable
 fun AIReviewCard(
-    email: DemoEmail,
+    email: ParsedEmail,
     res: JobExtractionResult,
     onConfirm: () -> Unit,
     onIgnore: () -> Unit,
