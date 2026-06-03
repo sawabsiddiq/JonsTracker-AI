@@ -1,7 +1,6 @@
 package com.example.data.sync
 
 import android.content.Context
-import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.data.local.AppDatabase
@@ -13,6 +12,7 @@ import com.example.data.remote.GmailClient
 import com.example.data.remote.JobExtractionResult
 import com.example.data.remote.ParsedEmail
 import com.example.data.repository.JobRepository
+import com.example.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -22,27 +22,34 @@ class GmailSyncWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     private val TAG = "GmailSyncWorker"
+    private val geminiApiKeyPref = "gemini_api_key"
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Starting periodic Gmail background sync worker...")
+        AppLog.d(TAG, "Starting periodic Gmail background sync worker.")
 
         if (SecurePrefsManager.hasFailed) {
-            Log.e(TAG, "Secure storage is unavailable on this device. Gmail sync is disabled.")
+            AppLog.e(TAG, "Secure storage is unavailable on this device. Gmail sync is disabled.")
             return@withContext Result.failure()
         }
 
         val context = applicationContext
         val prefs = SecurePrefsManager.getSecurePrefs(context)
         val token = prefs.getString("gmail_token", null)
+        val geminiApiKey = prefs.getString(geminiApiKeyPref, null)?.trim()
 
         val autoSync = prefs.getBoolean("auto_sync", true)
         if (!autoSync) {
-            Log.d(TAG, "Sync is disabled in user preferences.")
+            AppLog.d(TAG, "Sync is disabled in user preferences.")
             return@withContext Result.success()
         }
 
         if (token.isNullOrEmpty()) {
-            Log.d(TAG, "No Gmail OAuth credentials available in secure vault.")
+            AppLog.d(TAG, "No Gmail OAuth credentials available in secure vault.")
+            return@withContext Result.success()
+        }
+
+        if (!GeminiClient.hasConfiguredApiKey(geminiApiKey)) {
+            AppLog.d(TAG, "No Gemini API key available in secure vault.")
             return@withContext Result.success()
         }
 
@@ -63,7 +70,7 @@ class GmailSyncWorker(
             val messages = listResponse.messages ?: emptyList()
 
             if (messages.isEmpty()) {
-                Log.d(TAG, "Inbox is fully synchronized. No new messages.")
+                AppLog.d(TAG, "Inbox is fully synchronized. No new messages.")
                 return@withContext Result.success()
             }
 
@@ -72,7 +79,7 @@ class GmailSyncWorker(
                 !repository.isEmailProcessed(it.id) && !repository.isPendingAiExtraction(it.id)
             }
             if (unprocessed.isEmpty()) {
-                Log.d(TAG, "All raw emails are already logged.")
+                AppLog.d(TAG, "All raw emails are already logged.")
                 return@withContext Result.success()
             }
 
@@ -80,7 +87,7 @@ class GmailSyncWorker(
 
             for (ref in unprocessed) {
                 if (aiScansCount >= maxAnalyze) {
-                    Log.d(TAG, "Reached bg job max AI scan limit ($maxAnalyze)")
+                    AppLog.d(TAG, "Reached background job max AI scan limit.")
                     break
                 }
 
@@ -112,7 +119,7 @@ class GmailSyncWorker(
 
                     // AI extraction with fallback
                     val extractionResult = try {
-                        GeminiClient.extractJobDetails(trimmedBody)
+                        GeminiClient.extractJobDetails(trimmedBody, geminiApiKey!!)
                     } catch (e: Exception) {
                         null
                     }
@@ -164,12 +171,12 @@ class GmailSyncWorker(
                         repository.insertProcessedEmail(logEmail)
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Skipping email item ${ref.id} due to inline extraction failure.", e)
+                    AppLog.e(TAG, "Skipping email item due to inline extraction failure.", e)
                 }
             }
             Result.success()
         } catch (e: Exception) {
-            Log.e(TAG, "Background task sync failed completely.", e)
+            AppLog.e(TAG, "Background task sync failed completely.", e)
             Result.retry()
         }
     }

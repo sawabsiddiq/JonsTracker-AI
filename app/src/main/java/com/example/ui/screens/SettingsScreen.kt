@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,6 +42,8 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
     val connectedEmail by viewModel.gmailConnectedEmail.collectAsState()
     val isAutoSync by viewModel.autoSyncEnabled.collectAsState()
     val secureStorageAvailable by viewModel.secureStorageAvailable.collectAsState()
+    val geminiApiKeyConfigured by viewModel.geminiApiKeyConfigured.collectAsState()
+    var geminiApiKeyInput by remember { mutableStateOf("") }
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showSyncClearDialog by remember { mutableStateOf(false) }
@@ -347,6 +350,100 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                 Column(modifier = Modifier.padding(20.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = if (geminiApiKeyConfigured && secureStorageAvailable) SleekPrimary else SleekSubtext,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Gemini API key",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = SleekSecondary
+                            )
+                            Text(
+                                text = if (!secureStorageAvailable) {
+                                    "Secure Storage Unavailable"
+                                } else if (geminiApiKeyConfigured) {
+                                    "Configured for AI extraction"
+                                } else {
+                                    "Required for Gmail and pasted-email AI parsing"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (!secureStorageAvailable) MaterialTheme.colorScheme.error else if (geminiApiKeyConfigured) SleekPrimary else SleekSubtext
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = geminiApiKeyInput,
+                        onValueChange = { geminiApiKeyInput = it },
+                        enabled = secureStorageAvailable,
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        label = { Text("Paste Gemini API key") },
+                        supportingText = { Text("Stored only in encrypted device preferences.") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("gemini_api_key_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                haptic?.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                if (viewModel.saveGeminiApiKey(geminiApiKeyInput)) {
+                                    geminiApiKeyInput = ""
+                                    Toast.makeText(context, "Gemini API key saved.", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Enter a valid Gemini API key.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            enabled = secureStorageAvailable && geminiApiKeyInput.isNotBlank(),
+                            colors = ButtonDefaults.buttonColors(containerColor = SleekPrimary),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("save_gemini_api_key_button")
+                        ) {
+                            Text("Save key", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                haptic?.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                geminiApiKeyInput = ""
+                                viewModel.clearGeminiApiKey()
+                                Toast.makeText(context, "Gemini API key cleared.", Toast.LENGTH_SHORT).show()
+                            },
+                            enabled = secureStorageAvailable && geminiApiKeyConfigured,
+                            border = BorderStroke(1.dp, SleekBorder),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("clear_gemini_api_key_button")
+                        ) {
+                            Text("Clear key", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Divider(color = SleekBorder)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -595,7 +692,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                     Text(
                         text = "The JobTrack AI application processes your data following strict local privacy practices:\n\n" +
                                 "1. LOCAL STORAGE: Your credentials, email metadata, and application updates are stored locally on your device's offline database so they remain under your control.\n\n" +
-                                "2. EMAIL ANALYSIS via GEMINI API: When analyzing your inbox or pasted messages, selected email excerpts are sent to the Google Gemini API to extract details. This transmission occurs only during active scans and analyses.\n\n" +
+                                "2. EMAIL ANALYSIS via GEMINI API: When analyzing your inbox or pasted messages, selected, trimmed email excerpts are sent directly to the Google Gemini API to extract details. This transmission occurs only during active scans and analyses.\n\n" +
                                 "3. COMPLETE DELETION CONTROL: You have full authority over your data. You can erase your entire database, clean your Gmail sync processed history logs, or disconnect your Google account details at any time directly through this settings screen.",
                         style = MaterialTheme.typography.labelSmall,
                         color = SleekSubtext,

@@ -180,7 +180,7 @@ fun OnboardingScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifi
                     HighlightItem(
                         icon = Icons.Default.Info,
                         title = "Local Vault & AI Parsing",
-                        desc = "We parsing data directly via Gemini REST API. High-fidelity extraction on device. Your career logs remain in local SQLite."
+                        desc = "Selected email excerpts are parsed through Gemini REST API. Your career logs remain in local SQLite."
                     )
                 }
             }
@@ -241,7 +241,7 @@ fun OnboardingScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifi
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "We prioritize your privacy. This application functions client-side. The email scans require read-only scopes. We send raw mail snippets only to Gemini API for parsing and never upload text blocks onto cloud servers. You approve all records before writing them to disk.",
+                                text = "We prioritize your privacy. This application functions client-side. Email scans require read-only scopes. Selected, trimmed email excerpts may be sent directly to the Gemini API for parsing. You approve extracted records before writing them to your tracker.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.62f),
                                 lineHeight = 16.sp

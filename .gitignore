@@ -1,5 +1,6 @@
 *.iml
 .gradle
+.android-sdk/
 .kotlin
 /local.properties
 /.idea/caches
@@ -9,6 +10,7 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
+.build-outputs/
 /build
 /captures
 .externalNativeBuild
@@ -16,3 +18,8 @@
 local.properties
 .env
 debug.keystore
+debug.keystore.base64
+*.jks
+*.keystore
+*.p12
+*.pem

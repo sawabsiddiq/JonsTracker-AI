@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.testTag
 import com.example.ui.*
 import com.example.ui.screens.*
 import com.example.ui.theme.MyApplicationTheme
+import com.example.util.AppLog
 
 class MainActivity : ComponentActivity() {
     
@@ -77,7 +78,8 @@ class MainActivity : ComponentActivity() {
                             viewModel.setSyncError("Google Account not found.")
                         }
                     } catch (e: Exception) {
-                        viewModel.setSyncError("Google Sign-In failed: ${e.message}")
+                        AppLog.e("MainActivity", "Google Sign-In failed.", e)
+                        viewModel.setSyncError("Google Sign-In failed. Please try reconnecting your account.")
                     }
                 } else {
                     viewModel.setSyncError("Google Sign-In cancelled or failed.")

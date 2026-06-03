@@ -2,9 +2,9 @@ package com.example.data.local
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
+import com.example.util.AppLog
 
 object SecurePrefsManager {
     private const val TAG = "SecurePrefsManager"
@@ -23,7 +23,7 @@ object SecurePrefsManager {
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize EncryptedSharedPreferences", e)
+            AppLog.e(TAG, "Failed to initialize EncryptedSharedPreferences.", e)
             hasFailed = true
             InMemorySharedPreferences()
         }

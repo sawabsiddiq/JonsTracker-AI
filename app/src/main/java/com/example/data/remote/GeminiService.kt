@@ -1,10 +1,9 @@
 package com.example.data.remote
 
-import android.util.Log
+import com.example.util.AppLog
 import com.jobtrackai.app.BuildConfig
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -25,6 +24,7 @@ interface GeminiApi {
 object GeminiClient {
     private const val TAG = "GeminiClient"
     private const val BASE_URL = "https://generativelanguage.googleapis.com/"
+    private val placeholderKeys = setOf("MY_GEMINI_API_KEY", "your_gemini_api_key_here")
 
     private val moshi = Moshi.Builder()
         .addLast(KotlinJsonAdapterFactory())
@@ -34,9 +34,13 @@ object GeminiClient {
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
-        })
+        .apply {
+            if (BuildConfig.DEBUG) {
+                addInterceptor(HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BASIC
+                })
+            }
+        }
         .build()
 
     private val api: GeminiApi by lazy {
@@ -48,10 +52,15 @@ object GeminiClient {
             .create(GeminiApi::class.java)
     }
 
-    suspend fun extractJobDetails(emailBody: String): JobExtractionResult? {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-            Log.e(TAG, "Gemini API key is not configured or in placeholder state.")
+    fun hasConfiguredApiKey(apiKey: String?): Boolean {
+        val trimmedKey = apiKey?.trim()
+        return !trimmedKey.isNullOrBlank() && trimmedKey !in placeholderKeys
+    }
+
+    suspend fun extractJobDetails(emailBody: String, apiKey: String): JobExtractionResult? {
+        val trimmedApiKey = apiKey.trim()
+        if (!hasConfiguredApiKey(trimmedApiKey)) {
+            AppLog.e(TAG, "Gemini API key is not configured.")
             return null
         }
 
@@ -101,10 +110,9 @@ object GeminiClient {
         )
 
         return try {
-            val response = api.generateContent(apiKey, request)
+            val response = api.generateContent(trimmedApiKey, request)
             val jsonText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
             if (jsonText != null) {
-                Log.d(TAG, "Raw returned JSON: $jsonText")
                 // Clean markdown wrapping if model accidentally outputs it
                 val cleanJson = jsonText.trim()
                     .removePrefix("```json")
@@ -115,11 +123,11 @@ object GeminiClient {
                 val adapter = moshi.adapter(JobExtractionResult::class.java)
                 adapter.fromJson(cleanJson)
             } else {
-                Log.e(TAG, "No response candidate content received.")
+                AppLog.e(TAG, "No response candidate content received.")
                 null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing job details via Gemini REST API", e)
+            AppLog.e(TAG, "Error parsing job details via Gemini REST API.", e)
             null
         }
     }
