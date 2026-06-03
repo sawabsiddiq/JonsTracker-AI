@@ -26,6 +26,11 @@ class GmailSyncWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         Log.d(TAG, "Starting periodic Gmail background sync worker...")
 
+        if (SecurePrefsManager.hasFailed) {
+            Log.e(TAG, "Secure storage is unavailable on this device. Gmail sync is disabled.")
+            return@withContext Result.failure()
+        }
+
         val context = applicationContext
         val prefs = SecurePrefsManager.getSecurePrefs(context)
         val token = prefs.getString("gmail_token", null)

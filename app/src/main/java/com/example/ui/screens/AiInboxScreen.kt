@@ -50,6 +50,7 @@ fun AiInboxScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier)
     val detected by viewModel.scanProgressDetected.collectAsState()
     val limitReached by viewModel.scanLimitReached.collectAsState()
     val syncError by viewModel.syncError.collectAsState()
+    val secureStorageAvailable by viewModel.secureStorageAvailable.collectAsState()
 
     var editingItem by remember { mutableStateOf<Pair<DemoEmail, JobExtractionResult>?>(null) }
     var showSetupInstructions by remember { mutableStateOf(false) }
@@ -211,7 +212,7 @@ fun AiInboxScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier)
 
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Gmail connection requires production OAuth setup.",
+                            text = if (!secureStorageAvailable) "Secure storage is unavailable on this device. Gmail sync is disabled." else "Gmail sync requires production OAuth setup.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
                             fontWeight = FontWeight.Bold,

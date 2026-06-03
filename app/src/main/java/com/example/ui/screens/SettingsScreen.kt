@@ -39,6 +39,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
 
     val token by viewModel.gmailAccessToken.collectAsState()
     val isAutoSync by viewModel.autoSyncEnabled.collectAsState()
+    val secureStorageAvailable by viewModel.secureStorageAvailable.collectAsState()
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showSyncClearDialog by remember { mutableStateOf(false) }
@@ -352,7 +353,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                             Icon(
                                 imageVector = Icons.Default.Email,
                                 contentDescription = null,
-                                tint = if (!token.isNullOrEmpty()) SleekPrimary else SleekSubtext,
+                                tint = if (!token.isNullOrEmpty() && secureStorageAvailable) SleekPrimary else SleekSubtext,
                                 modifier = Modifier.size(24.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
@@ -363,14 +364,14 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                                     color = SleekSecondary
                                 )
                                 Text(
-                                    text = if (!token.isNullOrEmpty()) "Gmail Connected & Authorized" else "Disconnected",
+                                    text = if (!secureStorageAvailable) "Secure Storage Unavailable" else if (!token.isNullOrEmpty()) "Gmail Connected & Authorized" else "Disconnected",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (!token.isNullOrEmpty()) SleekPrimary else SleekSubtext
+                                    color = if (!secureStorageAvailable) MaterialTheme.colorScheme.error else if (!token.isNullOrEmpty()) SleekPrimary else SleekSubtext
                                 )
                             }
                         }
 
-                        if (!token.isNullOrEmpty()) {
+                        if (!token.isNullOrEmpty() && secureStorageAvailable) {
                             Button(
                                 onClick = {
                                     haptic?.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
@@ -387,7 +388,18 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                         }
                     }
 
-                    if (!token.isNullOrEmpty()) {
+                    if (!secureStorageAvailable) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Secure storage is unavailable on this device. Gmail sync is disabled.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    if (!token.isNullOrEmpty() && secureStorageAvailable) {
                         Spacer(modifier = Modifier.height(16.dp))
                         Divider(color = SleekBorder)
                         Spacer(modifier = Modifier.height(14.dp))
@@ -399,7 +411,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                         ) {
                             Column {
                                 Text(
-                                    text = "Automated email node syncer",
+                                    text = "Automated email syncer",
                                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                                     color = SleekSecondary
                                 )
@@ -542,7 +554,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
 
             // --- SECTION 3: Security & Privacy Policy Disclosure ---
             Text(
-                text = "COGNITIVE VAULT DISCLOSURE",
+                text = "SECURITY & PRIVACY DISCLOSURE",
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
                 color = SleekPrimary
             )
@@ -562,16 +574,16 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Your data privacy is our absolute priority. This application implements the following strict boundaries:\n\n" +
-                                "1. LOCAL ONLY PERSISTENCE: Your credentials, email metadata, matches, and pipeline steps are written and stored client-side in secure offline SQLite database levels. We execute no analytical tracking, telemetry, or remote user profiling.\n\n" +
-                                "2. PRIVACY COMPLIANCE: Full Privacy details conform to standard sandbox regulations. Under no circumstances are raw email contents or body payloads uploaded or cached to external cloud servers.\n\n" +
-                                "3. ZERO-RETENTION COGNITIVE PARSING: Extractions are formatted client-side and analyzed directly via encrypted REST API calls to the Google Gemini endpoint. At no point do we retain, pipeline, or feed inputs into third-party vector weights.",
+                                "1. LOCAL ONLY PERSISTENCE: Your credentials, email metadata, matches, and application pipeline steps are written and stored client-side in secure offline SQLite database levels. We execute no analytical tracking, telemetry, or remote user profiling.\n\n" +
+                                "2. SECURE EMAIL EXTRACTION via GEMINI: To analyze and extract relevant job applications, selected email body excerpts are sent securely and directly to the Google Gemini API. These raw email contents are NOT stored on any second-party servers and are processed with zero-retention.\n\n" +
+                                "3. YOUR CONTROL: No email analytics or extractions affect your active job pipeline tables without your direct review and approval in the AI Inbox.",
                         style = MaterialTheme.typography.labelSmall,
                         color = SleekSubtext,
                         lineHeight = 16.sp
                     )
                     Spacer(modifier = Modifier.height(20.dp))
                     Text(
-                        text = "Full terms and secure encryption rules correspond to the official local sandboxed SDK protocol.",
+                        text = "Your data and privacy are fully protected under secure locally-encrypted SQLite database rules.",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = SleekPrimary,
                         textAlign = TextAlign.Center,

@@ -32,7 +32,7 @@ import androidx.compose.runtime.setValue
 
 /**
  * Physics-based spring clickable modifier that gives cards and buttons tactile bouncy feedback.
- * Plays haptic feedback vibration to simulate true mechanical clicks.
+ * Plays haptic feedback vibration to replicate true mechanical clicks.
  */
 @Composable
 fun Modifier.springClickable(

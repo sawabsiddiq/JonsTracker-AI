@@ -12,7 +12,6 @@ import com.example.data.local.JobEvent
 import com.example.data.local.ProcessedEmail
 import com.example.data.local.PendingAiExtraction
 import com.example.data.local.SecurePrefsManager
-import com.example.data.analytics.CrashlyticsHelper
 import com.example.data.repository.JobRepository
 import com.example.data.remote.DemoEmail
 import com.example.data.remote.GeminiClient
@@ -99,6 +98,9 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _scanMode = MutableStateFlow(prefs.getString("scan_mode", "Balanced") ?: "Balanced")
     val scanMode: StateFlow<String> = _scanMode.asStateFlow()
+
+    private val _secureStorageAvailable = MutableStateFlow(!SecurePrefsManager.hasFailed)
+    val secureStorageAvailable: StateFlow<Boolean> = _secureStorageAvailable.asStateFlow()
 
     fun setScanDays(days: Int) {
         prefs.edit().putInt("scan_days", days).apply()
@@ -422,7 +424,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
         _lastGmailScan.value = now
     }
 
-    // --- Progress tracking states for live and demo scans ---
+    // --- Progress tracking states for live email scans ---
     private val _scanProgressFound = MutableStateFlow(0)
     val scanProgressFound: StateFlow<Int> = _scanProgressFound.asStateFlow()
 
@@ -546,7 +548,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                     } catch (e: java.io.IOException) {
                         _syncErrorType.value = SyncErrorType.NoInternet
                         _syncError.value = "No internet connection detected. Please verify your internet link and try again."
-                        CrashlyticsHelper.recordException(e)
+                        Log.e(TAG, "Network scanner error", e)
                         return@launch
                     } catch (e: retrofit2.HttpException) {
                         if (e.code() == 401 || e.code() == 403) {
@@ -556,7 +558,7 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                             _syncErrorType.value = SyncErrorType.AuthFailure
                             _syncError.value = "Google Auth Connection error (${e.code()}): ${e.message()}"
                         }
-                        CrashlyticsHelper.recordException(e)
+                        Log.e(TAG, "Http scanner error", e)
                         return@launch
                     }
 
@@ -659,7 +661,6 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                                 }
                             } catch (e: Exception) {
                                 Log.e(TAG, "Failed to parse individual live email ${ref.id}", e)
-                                CrashlyticsHelper.recordException(e)
                             }
                         }
                     }
@@ -700,7 +701,6 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
             } catch (e: Exception) {
                 success = false
                 Log.e(TAG, "Sync process failed", e)
-                CrashlyticsHelper.recordException(e)
                 _syncError.value = "Scraper error: ${e.message}"
             } finally {
                 if (success) {
@@ -708,116 +708,6 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                 }
                 _syncingState.value = false
             }
-        }
-    }
-
-    private suspend fun autoScanAndInjectLiveGmail(token: String) {
-        val bearer = "Bearer $token"
-        try {
-            val listResponse = withContext(Dispatchers.IO) {
-                GmailClient.service.listMessages(bearerToken = bearer, query = "newer_than:1d", maxResults = 5)
-            }
-            val messages = listResponse.messages ?: emptyList()
-            val unprocessed = messages.filter { !repository.isEmailProcessed(it.id) }
-            for (ref in unprocessed) {
-                val detail = withContext(Dispatchers.IO) { GmailClient.service.getMessage(bearer, ref.id) }
-                val email = GmailClient.mapToDemoEmail(detail)
-                val extraction = withContext(Dispatchers.IO) { GeminiClient.extractJobDetails(email.body) } ?: generateLocalExtractionFallback(email)
-
-                if (extraction.isJobRelated && extraction.confidence >= 0.82f) {
-                    // Redirect detected live emails into the AI review queue first (No auto-injection)
-                    val currentList = _gmailSyncResults.value.toMutableList()
-                    if (currentList.none { it.first.messageId == email.messageId }) {
-                        currentList.add(email to extraction)
-                        _gmailSyncResults.value = currentList
-                    }
-                } else {
-                    // Mark as processed (either irrelevant or ignored)
-                    val proceEmail = ProcessedEmail(
-                        gmailMessageId = email.messageId,
-                        threadId = email.threadId,
-                        sender = email.sender,
-                        subject = email.subject,
-                        dateString = email.dateString,
-                        snippet = email.snippet,
-                        classification = if (extraction.isJobRelated) "low_confidence_skipped" else "irrelevant",
-                        confidence = extraction.confidence,
-                        linkedApplicationId = null
-                    )
-                    withContext(Dispatchers.IO) {
-                        repository.insertProcessedEmail(proceEmail)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("BackgroundScanner", "Periodic live back-sync error: ${e.message}")
-        }
-    }
-
-    private suspend fun injectExtractedJobIntoDatabase(email: DemoEmail, result: JobExtractionResult) {
-        withContext(Dispatchers.IO) {
-            val company = result.companyName ?: "Unknown Company"
-            val title = result.jobTitle ?: "Unknown Role"
-            val apps = repository.allApplications.first()
-            val matchedApp = apps.find {
-                it.companyName.equals(company, ignoreCase = true) &&
-                        it.jobTitle.equals(title, ignoreCase = true)
-            }
-
-            val targetAppId: Int
-            if (matchedApp != null) {
-                targetAppId = matchedApp.id
-                val updatedApp = matchedApp.copy(
-                    currentStatus = result.applicationStatus ?: matchedApp.currentStatus,
-                    notes = if (result.nextAction != null) {
-                        "${matchedApp.notes}\n\n[Auto Background Sync] Next action: ${result.nextAction}".trim()
-                    } else matchedApp.notes,
-                    updatedAt = System.currentTimeMillis()
-                )
-                repository.updateApplication(updatedApp)
-            } else {
-                val parsedDate = parseDateString(result.eventDate) ?: System.currentTimeMillis()
-                val newApp = JobApplication(
-                    companyName = company,
-                    jobTitle = title,
-                    currentStatus = result.applicationStatus ?: "Applied",
-                    source = "Live Gmail Event",
-                    appliedDate = parsedDate,
-                    notes = result.summary ?: "Extracted in real-time background sync.",
-                    nextAction = result.nextAction ?: "",
-                    createdAt = System.currentTimeMillis(),
-                    updatedAt = System.currentTimeMillis()
-                )
-                targetAppId = repository.insertApplication(newApp).toInt()
-            }
-
-            val parsedEventDate = parseDateString(result.eventDate) ?: System.currentTimeMillis()
-            val newEvent = JobEvent(
-                applicationId = targetAppId,
-                eventType = result.eventType,
-                eventDate = parsedEventDate,
-                summary = result.summary ?: "Live background email trigger.",
-                extractedByAi = true,
-                confidence = result.confidence,
-                rawSnippet = email.snippet,
-                createdAt = System.currentTimeMillis()
-            )
-            repository.insertEvent(newEvent)
-
-            val proceEmail = ProcessedEmail(
-                gmailMessageId = email.messageId,
-                threadId = email.threadId,
-                subject = email.subject,
-                sender = email.sender,
-                dateString = email.dateString,
-                snippet = email.snippet,
-                classification = result.eventType,
-                confidence = result.confidence,
-                linkedApplicationId = targetAppId
-            )
-            repository.insertProcessedEmail(proceEmail)
-
-            Log.d("BackgroundScanner", "Successfully auto-synced & injected email event for $company ($title)")
         }
     }
 
