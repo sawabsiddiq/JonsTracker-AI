@@ -52,6 +52,67 @@ class MainActivity : ComponentActivity() {
                 com.example.data.local.AppThemeMode.DARK -> true
             }
 
+            val triggerSignIn by viewModel.triggerGoogleSignIn.collectAsState()
+            val recoverableAuthIntent by viewModel.recoverableAuthIntent.collectAsState()
+
+            val gso = remember {
+                com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
+                    .requestEmail()
+                    .requestScopes(com.google.android.gms.common.api.Scope("https://www.googleapis.com/auth/gmail.readonly"))
+                    .build()
+            }
+            val googleSignInClient = remember { com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(this, gso) }
+
+            val googleSignInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                viewModel.onGoogleSignInComplete()
+                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                    val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                    try {
+                        val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                        if (account != null) {
+                            viewModel.retrieveAndSaveTokenForAccount(account)
+                        } else {
+                            viewModel.setSyncError("Google Account not found.")
+                        }
+                    } catch (e: Exception) {
+                        viewModel.setSyncError("Google Sign-In failed: ${e.message}")
+                    }
+                } else {
+                    viewModel.setSyncError("Google Sign-In cancelled or failed.")
+                }
+            }
+
+            val recoverableAuthLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                viewModel.clearRecoverableAuthIntent()
+                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                    val lastAccount = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(this)
+                    if (lastAccount != null) {
+                        viewModel.retrieveAndSaveTokenForAccount(lastAccount)
+                    }
+                } else {
+                    viewModel.setSyncError("Gmail readonly access authorization denied.")
+                }
+            }
+
+            LaunchedEffect(triggerSignIn) {
+                if (triggerSignIn) {
+                    googleSignInClient.signOut().addOnCompleteListener {
+                        val signInIntent = googleSignInClient.signInIntent
+                        googleSignInLauncher.launch(signInIntent)
+                    }
+                }
+            }
+
+            LaunchedEffect(recoverableAuthIntent) {
+                recoverableAuthIntent?.let { intent ->
+                    recoverableAuthLauncher.launch(intent)
+                }
+            }
+
             MyApplicationTheme(darkTheme = useDarkTheme) {
                 val currentScreen by viewModel.currentScreen.collectAsState()
 

@@ -38,6 +38,7 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
     val scrollState = rememberScrollState()
 
     val token by viewModel.gmailAccessToken.collectAsState()
+    val connectedEmail by viewModel.gmailConnectedEmail.collectAsState()
     val isAutoSync by viewModel.autoSyncEnabled.collectAsState()
     val secureStorageAvailable by viewModel.secureStorageAvailable.collectAsState()
 
@@ -364,7 +365,13 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                                     color = SleekSecondary
                                 )
                                 Text(
-                                    text = if (!secureStorageAvailable) "Secure Storage Unavailable" else if (!token.isNullOrEmpty()) "Gmail Connected & Authorized" else "Disconnected",
+                                    text = if (!secureStorageAvailable) {
+                                        "Secure Storage Unavailable"
+                                    } else if (!token.isNullOrEmpty()) {
+                                        "Gmail Connected: ${connectedEmail ?: "linked user"}"
+                                    } else {
+                                        "Disconnected"
+                                    },
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (!secureStorageAvailable) MaterialTheme.colorScheme.error else if (!token.isNullOrEmpty()) SleekPrimary else SleekSubtext
                                 )
@@ -385,6 +392,19 @@ fun SettingsScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier
                             ) {
                                 Text("Disconnect", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
+                        } else if (secureStorageAvailable) {
+                            Button(
+                                onClick = {
+                                    haptic?.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                    viewModel.startGoogleSignInFlow()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = SleekPrimary),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                                modifier = Modifier.testTag("connect_gmail_button")
+                             ) {
+                                 Text("Connect", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                             }
                         }
                     }
 

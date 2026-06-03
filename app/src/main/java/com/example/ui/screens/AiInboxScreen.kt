@@ -51,6 +51,8 @@ fun AiInboxScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier)
     val limitReached by viewModel.scanLimitReached.collectAsState()
     val syncError by viewModel.syncError.collectAsState()
     val secureStorageAvailable by viewModel.secureStorageAvailable.collectAsState()
+    val gmailAccessToken by viewModel.gmailAccessToken.collectAsState()
+    val connectedEmail by viewModel.gmailConnectedEmail.collectAsState()
 
     var editingItem by remember { mutableStateOf<Pair<ParsedEmail, JobExtractionResult>?>(null) }
     var showSetupInstructions by remember { mutableStateOf(false) }
@@ -191,12 +193,15 @@ fun AiInboxScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier)
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Connect Button representing future OAuth flow structure
+                        // Connect Button representing real OAuth flow structure
+                        val tokenStr = gmailAccessToken
                         Button(
                             onClick = { 
-                                // Disabled in production without real OAuth configured
+                                haptic?.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                showSetupInstructions = false
+                                viewModel.startGoogleSignInFlow()
                             },
-                            enabled = false,
+                            enabled = secureStorageAvailable && tokenStr.isNullOrEmpty(),
                             modifier = Modifier.fillMaxWidth().height(44.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -205,16 +210,26 @@ fun AiInboxScreen(viewModel: JobTrackerViewModel, modifier: Modifier = Modifier)
                                 disabledContentColor = Color.White.copy(alpha = 0.6f)
                             )
                         ) {
-                            Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(imageVector = if (!tokenStr.isNullOrEmpty()) Icons.Default.CheckCircle else Icons.Default.Email, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Connect via Google Calendar/Gmail", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(
+                                text = if (!tokenStr.isNullOrEmpty()) "Connected to Google Mail" else "Connect via Google Mail",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (!secureStorageAvailable) "Secure storage is unavailable on this device. Gmail sync is disabled." else "Gmail sync requires production OAuth setup.",
+                            text = if (!secureStorageAvailable) {
+                                "Secure storage is unavailable on this device. Gmail sync is disabled."
+                            } else if (!tokenStr.isNullOrEmpty()) {
+                                "Authorized as ${connectedEmail ?: "linked user"}"
+                            } else {
+                                "OAuth connection authorizes Read-Only query sweeps of your inbox."
+                            },
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
+                            color = if (!secureStorageAvailable) MaterialTheme.colorScheme.error else SleekSubtext,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()

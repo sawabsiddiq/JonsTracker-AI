@@ -130,6 +130,74 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
     private val _gmailAccessToken = MutableStateFlow(prefs.getString("gmail_token", null))
     val gmailAccessToken: StateFlow<String?> = _gmailAccessToken.asStateFlow()
 
+    private val _gmailConnectedEmail = MutableStateFlow(prefs.getString("gmail_connected_email", null))
+    val gmailConnectedEmail: StateFlow<String?> = _gmailConnectedEmail.asStateFlow()
+
+    private val _recoverableAuthIntent = MutableStateFlow<android.content.Intent?>(null)
+    val recoverableAuthIntent: StateFlow<android.content.Intent?> = _recoverableAuthIntent.asStateFlow()
+
+    fun clearRecoverableAuthIntent() {
+        _recoverableAuthIntent.value = null
+    }
+
+    private val _triggerGoogleSignIn = MutableStateFlow(false)
+    val triggerGoogleSignIn: StateFlow<Boolean> = _triggerGoogleSignIn.asStateFlow()
+
+    fun startGoogleSignInFlow() {
+        if (SecurePrefsManager.hasFailed) {
+            _syncError.value = "Security Error: Encrypted storage failed to initialize. Gmail integration is safely disabled."
+            _syncErrorType.value = SyncErrorType.AuthFailure
+            return
+        }
+        _triggerGoogleSignIn.value = true
+    }
+
+    fun onGoogleSignInComplete() {
+        _triggerGoogleSignIn.value = false
+    }
+
+    fun setSyncError(message: String) {
+        _syncError.value = message
+        _syncErrorType.value = SyncErrorType.AuthFailure
+    }
+
+    fun retrieveAndSaveTokenForAccount(account: com.google.android.gms.auth.api.signin.GoogleSignInAccount) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val accountObj = account.account
+                if (accountObj == null) {
+                    withContext(Dispatchers.Main) {
+                        _syncError.value = "Failed to retrieve Google Account from sign-in."
+                        _syncErrorType.value = SyncErrorType.AuthFailure
+                    }
+                    return@launch
+                }
+                val app = getApplication<Application>()
+                val token = com.google.android.gms.auth.GoogleAuthUtil.getToken(
+                    app,
+                    accountObj,
+                    "oauth2:https://www.googleapis.com/auth/gmail.readonly"
+                )
+                
+                withContext(Dispatchers.Main) {
+                    saveGmailToken(token)
+                    prefs.edit().putString("gmail_connected_email", account.email).apply()
+                    _gmailConnectedEmail.value = account.email
+                }
+            } catch (e: com.google.android.gms.auth.UserRecoverableAuthException) {
+                withContext(Dispatchers.Main) {
+                    _recoverableAuthIntent.value = e.intent
+                }
+            } catch (e: Exception) {
+                Log.e("JobTrackerViewModel", "Failed to retrieve access token via GoogleAuthUtil", e)
+                withContext(Dispatchers.Main) {
+                    _syncError.value = "Google OAuth failed: ${e.message}"
+                    _syncErrorType.value = SyncErrorType.AuthFailure
+                }
+            }
+        }
+    }
+
     private val _autoSyncEnabled = MutableStateFlow(prefs.getBoolean("auto_sync", true))
     val autoSyncEnabled: StateFlow<Boolean> = _autoSyncEnabled.asStateFlow()
 
@@ -207,10 +275,21 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun saveGmailToken(token: String?) {
+        if (SecurePrefsManager.hasFailed && !token.isNullOrEmpty()) {
+            _syncError.value = "Security Error: Encrypted storage failed to initialize. Gmail integration is safely disabled."
+            _syncErrorType.value = SyncErrorType.AuthFailure
+            _gmailAccessToken.value = null
+            _gmailConnectedEmail.value = null
+            prefs.edit().remove("gmail_token").remove("gmail_connected_email").apply()
+            cancelBackgroundSync()
+            return
+        }
         prefs.edit().putString("gmail_token", token).apply()
         _gmailAccessToken.value = token
         if (!token.isNullOrEmpty()) {
-            scheduleBackgroundSync()
+            if (_autoSyncEnabled.value) {
+                scheduleBackgroundSync()
+            }
             scanGmail()
         } else {
             cancelBackgroundSync()
@@ -218,8 +297,9 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun clearGmailToken() {
-        prefs.edit().remove("gmail_token").apply()
+        prefs.edit().remove("gmail_token").remove("gmail_connected_email").apply()
         _gmailAccessToken.value = null
+        _gmailConnectedEmail.value = null
         cancelBackgroundSync()
     }
 
@@ -557,7 +637,8 @@ class JobTrackerViewModel(application: Application) : AndroidViewModel(applicati
                     } catch (e: retrofit2.HttpException) {
                         if (e.code() == 401 || e.code() == 403) {
                             _syncErrorType.value = SyncErrorType.TokenExpired
-                            _syncError.value = "Your authorized Gmail session has expired. Please disconnected and reconnect."
+                            _syncError.value = "Your authorized Gmail session has expired. Access was cleared. Please reconnect."
+                            clearGmailToken()
                         } else {
                             _syncErrorType.value = SyncErrorType.AuthFailure
                             _syncError.value = "Google Auth Connection error (${e.code()}): ${e.message()}"
